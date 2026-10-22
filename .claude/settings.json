@@ -1,0 +1,28 @@
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "ponytail@ponytail": true,
+    "ecc@ecc": true,
+    "impeccable@impeccable": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "ecc": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/affaan-m/ECC.git"
+      }
+    },
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
+      }
+    }
+  }
+}
