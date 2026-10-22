@@ -1,10 +1,24 @@
-import type { HttpHandler } from 'msw'
+import type { AnyHandler } from 'msw'
+import { cartHandlers } from './cart'
+import { controlHandlers } from './control'
+import { favoritesHandlers } from './favorites'
+import { nftHandlers } from './nfts'
+import { orderHandlers } from './orders'
+import { profileHandlers } from './profile'
+import { quoteHandlers } from './quote'
+import { sessionHandlers } from './session'
+import { walletsHandlers } from './wallets'
+import { realtimeHandler } from '../realtime/events'
 
-/**
- * Handlers REST dos 8 recursos da seção 5 (sessão/conta, NFTs, favoritos,
- * carrinho, cotação, pedidos, perfil, carteiras) + fixtures + cenários de
- * rede/falha (seção 6) são escopo da Fase 2 (`agent-mocks`). Esta lista
- * fica vazia de propósito na Fase 0 — só a estrutura de pastas e o ponto de
- * extensão existem aqui.
- */
-export const handlers: HttpHandler[] = []
+export const handlers: AnyHandler[] = [
+  ...sessionHandlers,
+  ...nftHandlers,
+  ...favoritesHandlers,
+  ...cartHandlers,
+  ...quoteHandlers,
+  ...orderHandlers,
+  ...profileHandlers,
+  ...walletsHandlers,
+  ...controlHandlers,
+  realtimeHandler,
+]

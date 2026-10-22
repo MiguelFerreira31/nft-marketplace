@@ -3,6 +3,17 @@ import type { ApiErrorResponse } from '@/shared/types'
 import { isApiErrorResponse } from '@/shared/types'
 
 /**
+ * Timeout padrão (ms) de toda requisição. Sem isto, uma resposta que nunca
+ * chega (conexão indisponível/timeout simulado pelo MSW, seção 6) deixaria a
+ * Promise pendurada para sempre — não há nenhuma lógica de negócio aqui,
+ * apenas uma configuração de transporte necessária para que os cenários de
+ * timeout do mock (`features/mocks/scenario.ts#forceTimeout`,
+ * `ordersCreateTimeoutOnce`) sejam observáveis pelo client (Axios rejeita
+ * com `ECONNABORTED` quando excedido). Documentado em `ARCHITECTURE.md`.
+ */
+export const HTTP_CLIENT_TIMEOUT_MS = 10_000
+
+/**
  * Único client Axios da aplicação. Toda chamada REST (catálogo, favoritos,
  * carrinho, cotação, pedidos, perfil, carteiras, sessão) passa por aqui —
  * nenhum outro módulo deve instanciar `axios` diretamente (seção 4 do
@@ -14,6 +25,7 @@ import { isApiErrorResponse } from '@/shared/types'
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
   withCredentials: true,
+  timeout: HTTP_CLIENT_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },

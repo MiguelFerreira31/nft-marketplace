@@ -1,21 +1,24 @@
 # Arquitetura — NFT Marketplace
 
 Este documento é o entregável de arquitetura das Tasks 0.1–0.3 (Fase 0 —
-Fundação e contratos) e das Tasks 1.1–1.2 (Fase 1 — Shell, roteamento e
-design system) do `PLAN.md`. As seções 1–5 descrevem a Fase 0: stack,
-estrutura de pastas, contratos REST/tipos compartilhados, a chave de
-idempotência de pedido, a regra de precisão de valores em ETH, e a política
-de cache/retry/invalidação/cancelamento/isolamento do TanStack Query —
-incluindo a interação escolhida para atualização otimista com rollback. A
-seção 6 descreve a Fase 1: as 9 rotas da seção 3 do readme, os guards de
-rota privada (com sessão mock provisória), o layout responsivo e os
-skeletons com shimmer.
+Fundação e contratos), das Tasks 1.1–1.2 (Fase 1 — Shell, roteamento e
+design system) e das Tasks 2.1–2.3 (Fase 2 — Mocking com MSW) do `PLAN.md`.
+As seções 1–5 descrevem a Fase 0: stack, estrutura de pastas, contratos
+REST/tipos compartilhados, a chave de idempotência de pedido, a regra de
+precisão de valores em ETH, e a política de cache/retry/invalidação/
+cancelamento/isolamento do TanStack Query — incluindo a interação escolhida
+para atualização otimista com rollback. A seção 6 descreve a Fase 1: as 9
+rotas da seção 3 do readme, os guards de rota privada (com sessão mock
+provisória), o layout responsivo e os skeletons com shimmer. A seção 8
+descreve a Fase 2: os handlers MSW dos 8 recursos, o estado
+persistido/reset, as fixtures, os cenários de rede/falha configuráveis e o
+binding Socket.IO.
 
-As fases seguintes (2–12, `PLAN.md`) implementam mocks, sessão real, tempo
-real, telas de produto, testes e deploy sobre esta fundação. Nada neste
-documento implementa fluxo de negócio de produto — isso é escopo dos
-agentes `agent-mocks`, `agent-auth`, `agent-catalog`, `agent-cart`,
-`agent-realtime`, `agent-checkout`, `agent-account`.
+As fases seguintes (3–12, `PLAN.md`) implementam sessão real, telas de
+produto, cliente de tempo real, testes e deploy sobre esta fundação. Nada
+neste documento implementa fluxo de UI de produto — isso é escopo dos
+agentes `agent-auth`, `agent-catalog`, `agent-cart`, `agent-realtime`,
+`agent-checkout`, `agent-account`.
 
 ## 1. Stack e decisões de setup
 
@@ -468,3 +471,408 @@ Fases 4/5 trocam o skeleton pelo conteúdo definitivo quando `isLoading` for
 | `npm run lint` | `oxlint` | 0 warnings/erros no código do projeto (overrides documentados acima) |
 | `npm run test:e2e` | `playwright test` | 2/2 passam (`chromium-desktop` + `chromium-mobile`) contra o shell/skeleton da Fase 1 |
 | `npm run lighthouse` | `lhci autorun` | roda 3 medições, grava relatórios em `.lighthouseci/`, assertions em `warn` (ver seção 1) |
+
+`npm run dev`/`npm run build`/`npm run preview` só sobem a camada de mocks
+(seção 8) quando `VITE_ENABLE_MOCKS=true` está definido no ambiente — ver
+seção 8.1. Sem essa variável, o build de produção nem inclui o código do
+MSW no bundle (confirmado: o chunk `browser-*.js`, ~445 kB, só aparece no
+`dist/` quando a flag está ativa — ver seção 8.1).
+
+## 8. Mocking com MSW (Fase 2 — Tasks 2.1, 2.2, 2.3, `agent-mocks`)
+
+Esta seção documenta os handlers REST dos 8 recursos da seção 5 do readme, o
+estado persistido/reset, as fixtures, os cenários de rede/falha
+configuráveis (seção 6) e o binding Socket.IO (seção 6/7) — tudo em
+`src/features/mocks/`. Nenhum item desta seção implementa UI; os
+componentes/hooks das Fases 3–8 só consomem os contratos de
+`shared/types`/`features/*/api` já existentes (Fase 0), sem saber que a
+resposta vem de um mock.
+
+### 8.1 Estrutura de pastas e ativação
+
+```
+src/features/mocks/
+  scenario.ts              # MockScenarioConfig: latência, falhas, timeouts, cenários de pagamento/idempotência (seção 8.5)
+  browser.ts                # setupWorker(...handlers) + window.__mocks__ (painel de controle, seção 8.8)
+  server.ts                 # setupServer(...handlers) — mesmos handlers, para Node (Playwright/testes futuros)
+  db/
+    types.ts                 # Shape interno do "banco" simulado (nunca exposto 1:1 pelos handlers)
+    seed.ts                   # Fixtures "de leitura fácil" → MockDb completo (hash de senha, carrinho calculado, etc.)
+    store.ts                  # getDb()/persistDb()/resetMockData() — localStorage (ou memória em Node), seção 8.2
+  fixtures/                  # Usuários, NFTs, coleções, criadores, carteiras, cupons (seção 8.3)
+  utils/                      # decimal.ts, http-error.ts, with-scenario.ts, auth.ts, cart.ts, quote.ts, nft-query.ts, password.ts, ids.ts, storage.ts
+  handlers/
+    session.ts, nfts.ts, favorites.ts, cart.ts, quote.ts, orders.ts, profile.ts, wallets.ts  # os 8 recursos (seção 8.4)
+    control.ts                 # painel de controle REST (`/api/__mock__/*`, fora do contrato — seção 8.8)
+    index.ts                   # combina tudo em `handlers: AnyHandler[]`
+  realtime/
+    events.ts                  # binding Socket.IO (seção 8.7)
+    mutations.ts                # ponte entre mutações no `MockDb` e os eventos `nft.updated`/`order.updated`
+```
+
+Ativação por configuração (seção 6: "A camada de mocks deve ser ativada por
+configuração e estar disponível no build de demonstração"):
+`VITE_ENABLE_MOCKS=true` no ambiente (`.env.local`, `.env.production`, ou
+variável de ambiente do provedor de deploy) faz `src/main.tsx` importar
+`features/mocks/browser` dinamicamente e chamar `worker.start()` ANTES de
+renderizar a árvore React (Fase 0/1, não alterado aqui). Como o import é
+dinâmico e a condição é uma comparação de string estática, o Vite
+tree-shakeia o módulo inteiro (handlers, fixtures, `@mswjs/socket.io-binding`
+etc.) quando a flag não está em `'true'` no momento do `build` — verificado
+nesta entrega: o bundle de produção sem a flag não contém nenhum chunk de
+mock; com a flag, aparece um chunk `browser-*.js` dedicado (~445 kB) com
+todo o código deste diretório. Isso é o que permite a MESMA base de código
+servir dev, demo publicado (com mocks) e uma eventual build real (sem
+mocks, se um dia houver backend) sem nenhuma branch de código no
+app/componentes — só a env var decide.
+
+### 8.2 Estado persistido e reset (seção 6)
+
+`db/store.ts` mantém um `MockDb` único em memória, carregado/persistido via
+`utils/storage.ts` (que usa `localStorage` no browser — sobrevive a refresh
+— e cai para um `Map` em memória em Node puro sem `localStorage`, ex.:
+`msw/node` fora de jsdom). Todo handler segue o padrão
+`const db = await getDb(); <mutação>; persistDb(db)`.
+
+`db/seed.ts#createSeedDb()` é a ÚNICA função que conhece a transformação de
+fixtures "fáceis de ler" (seção 8.3) para o shape interno completo (preços/
+estoque já calculados, senha com hash — nunca texto puro, carrinho dos
+usuários com `subtotalEth` já derivado). `db/types.ts#MockDb.schemaVersion`
+é comparado contra o valor atual a cada boot: se o `localStorage` tiver um
+schema antigo (porque as fixtures mudaram entre entregas), o mock refaz o
+seed automaticamente — ninguém herda um banco "meio migrado".
+
+Reset (seção 6: "o reset deve restaurar integralmente um cenário
+conhecido"): `resetMockData()` (`db/store.ts`) descarta QUALQUER estado
+criado durante uma sessão de testes (pedidos, cupom aplicado, favoritos,
+carrinho, carteiras, preços alterados via `nft.updated`) e reconstrói o
+`MockDb` do zero a partir das fixtures. Disponível por dois caminhos (ver
+seção 8.8): `POST /api/__mock__/reset` (HTTP) e `window.__mocks__.resetAll()`
+(JS direto, inclui também resetar o `scenario.ts` para o padrão).
+
+### 8.3 Fixtures (seção 6: "≥2 usuários", "variedade suficiente para filtros e paginação")
+
+- **NFTs** (`fixtures/nfts.ts#buildNftFixtures()`): 48 itens determinísticos
+  (6 categorias × 8 itens — `art`, `music`, `photography`, `gaming`,
+  `collectibles`, `virtual-worlds`), com 1 a 3 edições cada, preços e
+  estoques variados, `createdAt` espalhado nos últimos ~90 dias (para
+  exercitar `sortKey: 'newest'`). Nenhum `Math.random()` em lugar algum —
+  o mesmo `buildNftFixtures()` sempre produz os mesmos 48 itens, nos mesmos
+  ids, o que é o que torna o reset reproduzível. Três ids reservados para
+  cenários determinísticos (usados também pelo painel de controle):
+  - `nft-sold-out-demo` — todas as edições com `availableQuantity: 0`.
+  - `nft-low-stock-demo` — uma edição com `availableQuantity: 1`.
+  - `nft-price-drift-demo` — alvo recomendado para
+    `POST /api/__mock__/simulate/nft-update` (seção 8.7/roteiro da seção 7).
+  - Imagens (`coverImageUrl`/`avatarUrl`) são SVGs inline em data URI
+    (`fixtures/placeholder-image.ts`) — decisão registrada aqui pelo mesmo
+    motivo da Fase 1 (Figma real inacessível neste ambiente): zero
+    dependência de rede/CDN externo, o que mantém o build de demonstração
+    funcionando totalmente offline/sem serviço externo. Troca por assets
+    reais do Figma não exige mudar o contrato (`coverImageUrl` continua
+    `string`).
+- **Usuários** (`fixtures/users.ts`): `ana@example.com` (favoritos, carrinho
+  com 2 itens, 2 carteiras) e `bruno@example.com` (1 favorito, carrinho
+  vazio, 1 carteira) — senha `Colecionar123!` para ambos. Dois usuários com
+  estados iniciais diferentes de propósito, para exercitar "vazio" sem
+  precisar de um terceiro usuário.
+- **Cupons** (`fixtures/coupons.ts`): `BEMVINDO10` (válido, 10%),
+  `PROMO20` (válido, 20%, expira em 2027), `EXPIRADO15` (existe, mas
+  `expiresAt` no passado → 409 `COUPON_UNAVAILABLE`), `ESGOTADO5` (existe,
+  mas `usedCount === maxUses` → 409 `COUPON_UNAVAILABLE`). Qualquer outro
+  código → 404 `NOT_FOUND` (`resource: 'coupon'`). Nenhum destes precisa de
+  um toggle de cenário — são deterministicamente "inválido"/"expirado" só
+  pelos dados da fixture, reproduzíveis a qualquer momento.
+
+### 8.4 Handlers REST — os 8 recursos (seção 5)
+
+Todo handler usa exclusivamente os tipos de `shared/types` (zero shape
+duplicado) e é envolvido por `utils/with-scenario.ts#withScenario(endpoint, fn)`,
+que aplica os cenários de rede/falha (seção 8.5) e converte qualquer
+`ApiMockError` lançado por `fn` (`utils/http-error.ts`) no envelope de erro
+único `ApiErrorResponse` — nunca um shape de erro alternativo.
+
+| Recurso | Rotas | Observações |
+| --- | --- | --- |
+| Sessão/conta | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/session`, `POST /api/auth/logout` | Sessão simulada = PONTEIRO único em `MockDb.session` (ver 8.4.1), não cookie real ainda. Login/registro mesclam o carrinho de visitante no carrinho do usuário (seção 3: "preservar os itens do visitante ao autenticar"). |
+| NFTs | `GET /api/nfts`, `GET /api/nfts/:nftId` | Busca/filtro/ordenação/paginação em `utils/nft-query.ts`; `isFavorited` só presente quando há usuário autenticado. |
+| Favoritos | `GET /api/favorites`, `POST /api/favorites`, `DELETE /api/favorites/:nftId` | Exigem sessão; `favorites` é `Record<NftId, favoritedAt>` por usuário — persiste entre sessões. |
+| Carrinho | `GET /api/cart`, `POST /api/cart/items`, `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id` | Carrinho de visitante OU do usuário autenticado (ver 8.4.1); `GET`/mutations sempre recalculam `unitPriceEth`/`availableQuantity`/`subtotalEth` a partir do estado ATUAL da edição (`utils/cart.ts#refreshCartPricing`) — um `nft.updated` do painel de controle aparece no carrinho na próxima leitura, sem precisar re-adicionar o item. |
+| Cotação | `GET /api/carts/:cartId/quote`, `POST /api/carts/:cartId/coupon`, `DELETE /api/carts/:cartId/coupon` | `quoteVersion` é baseado num "fingerprint" dos itens/preços/cupom (ver 8.6.2) — nunca incrementa só porque a rota foi chamada de novo sem nada mudar. |
+| Pedidos | `POST /api/orders` (header `Idempotency-Key`), `GET /api/orders/:orderId` | Idempotência completa (seção 8.6.1) + resolução assíncrona `pending → confirmed/refused` (seção 8.6.3). |
+| Perfil | `GET /api/profile`, `PATCH /api/profile`, `PATCH /api/profile/avatar`, `POST /api/profile/password` | Validação de e-mail duplicado (409), avatar como data URL (contrato já previa isso na Fase 0), senha nunca comparada/guardada em claro (`utils/password.ts`, SHA-256 com "sal" fixo — ver nota de segurança no próprio arquivo). |
+| Carteiras | `GET /api/wallets`, `PUT /api/wallets/:kind` | No máximo uma carteira por `kind` (`primary`/`secondary`) por usuário — reenviar o mesmo `kind` atualiza em vez de duplicar. |
+
+#### 8.4.1 Sessão simulada — ponteiro único (decisão + limitação deliberada)
+
+`utils/auth.ts#currentUser()`/`requireUser()` leem `db.session: { userId,
+token, expiresAt } | null` — um ÚNICO ponteiro "sessão ativa agora", não um
+cookie real por aba/usuário. Isso é suficiente para:
+
+- os 8 recursos responderem de forma consistente e tipada (o que esta Task
+  pedia: "GET /session... precisa existir e ser substituível depois sem
+  `agent-auth` ter que recriar o contrato" — o contrato `SessionResponse`/
+  `LoginResponse`/etc. não muda nunca, só a implementação interna pode);
+- os guards de rota da Fase 1 e os testes/roteiros da seção 6 funcionarem
+  (login → ações autenticadas → logout → 401 de novo);
+- o carrinho "de visitante" (`db.guestCart`, chave `'guest'`) e o carrinho
+  "do usuário atual" (`db.users[i].cart`, chave = `user.id`) coexistirem
+  exatamente como `queryKeys.cart.detail(userId | 'guest')` já antecipa em
+  `shared/query/keys.ts` (Fase 0).
+
+LIMITAÇÃO deliberada: não suporta duas sessões "simultâneas" (duas abas
+logadas como usuários diferentes ao mesmo tempo veriam o mesmo ponteiro).
+Isso é aceitável para o escopo do mock (dev/demo/Playwright rodam
+tipicamente uma sessão de navegador por vez) e **não** é o que o critério
+eliminatório "exposição de dados entre usuários" cobra — aquele critério é
+sobre o cache do TanStack Query/subscriptions não sobreviverem a um
+logout/troca de usuário NO MESMO navegador (responsabilidade do
+`queryClient.clear()` já documentado na seção 4.5, mais a limpeza de
+listeners do socket na Fase 6) — o ponteiro de sessão do mock é consistente
+com isso: cada login/logout substitui/zera o ponteiro inteiro. `agent-auth`
+(Fase 3) decide se evolui isto para cookie `httpOnly` real; o contrato
+público não precisa mudar para isso acontecer.
+
+#### 8.4.2 Mapeamento de erros não previstos literalmente no enum (decisões de nomenclatura)
+
+`ApiErrorBody` (Fase 0, `shared/types/errors.ts`) não tem um código dedicado
+para "carrinho não encontrado" nem para "cotação desatualizada" — os
+handlers reaproveitam os códigos mais próximos semanticamente, sem adicionar
+nenhum valor novo ao enum:
+
+- Carrinho/cotação para um `cartId` inexistente → 404 `NOT_FOUND`,
+  `resource: 'cart_item'` (não há `'cart'` no enum; `'cart_item'` é o mais
+  próximo).
+- `POST /orders` com `quoteVersion` diferente da cotação atual, OU algum
+  item sem estoque suficiente no momento da confirmação → 409 `CONFLICT`,
+  `reason: 'STOCK_UNAVAILABLE'` (a causa raiz de uma cotação desatualizada
+  É uma mudança de preço/disponibilidade — o mesmo motivo que já tem um
+  `reason` dedicado). `agent-checkout` (Fase 7) deve tratar
+  `409 STOCK_UNAVAILABLE` na criação do pedido como "cotação desatualizada
+  — busque uma nova cotação e peça confirmação de novo" (seção 7: "O
+  checkout impede a confirmação com uma cotação desatualizada").
+
+### 8.5 Cenários de rede/falha configuráveis e reproduzíveis (seção 6)
+
+`scenario.ts#MockScenarioConfig` é o painel único de configuração, com
+persistência própria (mesma estratégia de `localStorage`/memória de 8.2) e
+chave de endpoint (`MockEndpointKey`, ex.: `'nfts.list'`, `'orders.create'`)
+documentando exatamente qual operação cada campo afeta. Todo handler passa
+por `withScenario(endpointKey, fn)`, que resolve nesta ordem:
+
+1. `scenario.networkDown.includes(endpoint)` → `HttpResponse.error()`
+   (falha de conexão simulada — o client vê um erro de rede, sem resposta
+   HTTP alguma).
+2. `scenario.forceError[endpoint]` → responde imediatamente com o
+   status/corpo configurado (qualquer 4xx/5xx arbitrário).
+3. `scenario.forceTimeout.includes(endpoint)` → atrasa a resposta além de
+   `HTTP_CLIENT_TIMEOUT_MS` (`shared/api/http.ts`, 10 s — configurado nesta
+   entrega especificamente para que estes cenários sejam observáveis: sem
+   um timeout no client Axios, uma resposta atrasada ficaria pendurada para
+   sempre em vez de rejeitar com `ECONNABORTED`). O client desiste antes da
+   resposta chegar.
+4. Caso contrário: espera uma latência aleatória dentro de
+   `scenario.latencyMs` (ou do override por endpoint em
+   `latencyOverridesMs`) e then executa o handler normalmente. Como essa
+   latência é sorteada por requisição, duas chamadas concorrentes com
+   parâmetros diferentes (ex.: troca rápida de filtro no catálogo) podem
+   legitimamente resolver fora de ordem — exatamente o cenário "respostas
+   fora de ordem" da seção 6; cabe ao `TanStack Query` (política já
+   documentada na seção 4.4) descartar a resposta obsoleta.
+
+Campos adicionais do `MockScenarioConfig` cobrem os cenários remanescentes
+da seção 6 que não fazem sentido como "erro genérico por endpoint":
+
+| Cenário (seção 6) | Campo | Efeito |
+| --- | --- | --- |
+| Sessão expirada | `sessionForceExpired: boolean` | Qualquer endpoint autenticado passa a responder 401 `EXPIRED_SESSION`, mesmo com uma sessão "válida" guardada. |
+| Sucesso vazio | `forceEmpty: MockEndpointKey[]` | Hoje only `'nfts.list'`: força `{ items: [], total: 0 }` independente dos filtros enviados. |
+| Timeout pós-criação de pedido + recuperação por idempotência | `ordersCreateTimeoutOnce: boolean` | Ver 8.6.1. |
+| Pagamento confirmado/recusado | `paymentOutcome: 'confirmed' \| 'refused' \| 'pending-forever'` + `paymentResolutionDelayMs` | Ver 8.6.3. |
+
+Seleção/reset de cenário (documentável no README final do `agent-devops`,
+seção 12 do readme): ver painel de controle na seção 8.8 — mesma mecânica
+usada para resetar os dados.
+
+### 8.6 Pedidos — idempotência, cotação e pagamento (seção 5/6/7)
+
+#### 8.6.1 Idempotência (contrato completo já em `shared/types/orders.ts`, Fase 0)
+
+`handlers/orders.ts`: `db.idempotency[key] = { payload, orderId, pendingTimeout }`.
+
+- Chave nova → valida carrinho/carteira/cotação, cria o `Order` (`status:
+  'pending'`), agenda a resolução assíncrona (8.6.3) e grava o registro de
+  idempotência.
+- MESMA chave + MESMO payload (`JSON.stringify` do body) → devolve
+  imediatamente o pedido já existente (mesmo `OrderId`), sem repetir
+  nenhuma validação — cobre clique repetido e retry automático.
+- MESMA chave + payload DIFERENTE → 409 `CONFLICT`,
+  `reason: 'IDEMPOTENCY_KEY_MISMATCH'`.
+
+Cenário dedicado "timeout após criação do pedido, com recuperação por
+idempotência" (seção 6): ativado via
+`window.__mocks__.setScenario({ ordersCreateTimeoutOnce: true })` (ou
+`POST /api/__mock__/scenario`). Com a flag ativa, a 1ª chamada para uma
+chave NOVA cria o pedido normalmente (ele já existe no backend simulado,
+já agendado para resolver) mas a ENTREGA da resposta HTTP é atrasada além
+do timeout do client — o client vê um erro de timeout achando que nada foi
+criado. O reenvio (automático ou manual) com a MESMA chave cai no caminho
+"mesma chave + mesmo payload" acima, que responde imediatamente com o
+pedido já criado. Reproduzível à vontade: a flag persiste até ser
+desligada; cada nova chave de idempotência repete o mesmo comportamento.
+
+#### 8.6.2 `quoteVersion` — fingerprint, não contador de leituras
+
+`utils/quote.ts#computeQuote()` deriva `quoteVersion` de um "fingerprint"
+(itens + preços + quantidades + disponibilidade + cupom) guardado em
+`db.quoteState[cartId]`: a versão só incrementa quando esse fingerprint
+muda de uma chamada para outra, nunca só porque `GET /quote` foi chamado de
+novo sem nada ter mudado de verdade. Isso é o que permite ao checkout (Fase
+7) usar um `quoteVersion` já conhecido com segurança (um refetch do React
+Query sem mudança real não invalida a cotação que o usuário revisou), ao
+mesmo tempo em que qualquer mudança real (preço/estoque via
+`nft.updated`, ou aplicar/remover cupom) o invalida de verdade — exatamente
+o roteiro da seção 7: "o checkout impede a confirmação com uma cotação
+desatualizada".
+
+#### 8.6.3 Resolução assíncrona do pagamento (seção 7)
+
+`realtime/mutations.ts#scheduleOrderResolution()`: ao criar um pedido
+`pending`, agenda (via `setTimeout`) a resolução para
+`confirmed`/`refused` após `scenario.paymentResolutionDelayMs` (padrão:
+2000 ms), decidido por `scenario.paymentOutcome` — **lido no momento em que
+o timer dispara**, não no momento em que foi agendado, para permitir
+configurar o cenário depois de iniciar a criação do pedido sem corrida.
+`paymentOutcome: 'pending-forever'` não agenda nada: o pedido fica
+`pending` indefinidamente, simulando "interrupção de conexão enquanto o
+pedido está pendente" (seção 7) — só uma chamada explícita a
+`forceOrderStatus` (via `POST /api/__mock__/simulate/order-update`, seção
+8.8) o resolve, simulando a reconexão.
+
+Só na confirmação (`realtime/mutations.ts#settleOrder`, `outcome:
+'confirmed'`): debita o estoque de cada edição comprada (emitindo
+`nft.updated` para cada uma — seção 6: "mudanças nos dados simulados devem
+ser refletidas tanto nas respostas REST quanto nos eventos
+correspondentes") e remove do carrinho ORIGINAL exatamente os itens/
+quantidades comprados (seção 3: "após confirmação, remover do carrinho
+apenas os itens e quantidades comprados"; testado manualmente nesta entrega
+— ver seção 8.9). Numa recusa, carrinho e estoque permanecem intactos
+(seção 3: "Preservar os itens em falhas"). Pedidos confirmados/recusados
+são terminais (`settleOrder` ignora qualquer chamada subsequente num
+pedido que já saiu de `pending`) — seção 7.
+
+### 8.7 Binding Socket.IO — transporte e limitações (seção 6/7, Task 2.3)
+
+`realtime/events.ts` usa `ws.link()` (núcleo do `msw`) +
+`@mswjs/socket.io-binding#toSocketIo()` para decodificar/codificar o
+protocolo Engine.IO/Socket.IO por cima da conexão WebSocket crua que o
+`socket.io-client` REAL abre (`features/realtime/client/socket.ts`, Fase 0;
+o app força `transports: ['websocket']`, então não há fallback para
+polling HTTP a interceptar). `toSocketIo()` lida com o handshake inicial
+(pacotes Engine.IO `0`/Socket.IO `40`) automaticamente — é isso que permite
+`socket.on('nft.updated', ...)` no cliente real funcionar sem nenhum código
+adicional no lado do cliente (Fase 6 só precisa chamar `.connect()`/`.on()`
+normalmente).
+
+**Desvio documentado, com evidência, no padrão de URL do `ws.link()`:**
+`msw@3.0.3` expõe `ws.link(pattern)` a partir de um módulo interno chamado
+literalmente "experimental". Testado manualmente nesta entrega: com
+qualquer `pattern` diferente do literal `'*'` — `RegExp` (`/\/socket\.io\//`),
+string relativa (`'/socket.io/'`), string absoluta
+(`'ws://host:porta/socket.io/'`) — o listener de `connection` registrado
+via `ws.link(pattern).addEventListener('connection', fn)` NUNCA é invocado;
+a conexão é tratada como "sem handler correspondente" e passa de verdade
+para a rede real (confirmado isolando `worker.start({ onUnhandledFrame:
+'warn' })`, que loga explicitamente `[MSW] Warning: intercepted a
+WebSocket connection without a matching event handler` para a URL exata
+`ws://localhost:<porta>/socket.io/?EIO=4&transport=websocket` — ou seja, o
+`WebSocketInterceptor` por baixo do `msw` está ativo e INTERCEPTANDO a
+conexão corretamente; só o roteamento por padrão de URL do `ws.link()`
+falha em casar). Isolar o mesmo `WebSocketInterceptor`
+(`@mswjs/interceptors/WebSocket`) usado por baixo do `msw`, aplicado
+diretamente (sem passar pelo `msw`), funciona perfeitamente — o que
+localiza o bug especificamente no roteamento de `ws.link()`, não no
+mecanismo de interceptação em si nem no ambiente/bundler.
+
+Correção adotada: `ws.link('*')` (comprovadamente funcional) + filtragem
+manual por URL dentro do próprio handler. Conexões que não sejam para
+`/socket.io/` (ex.: o WebSocket de HMR do próprio Vite em `npm run dev`)
+chamam `connection.server.connect()` explicitamente para serem encaminhadas
+de verdade — a partir daí, `WebSocketServerConnection`
+(`@mswjs/interceptors`) encaminha mensagens/fechamento bidirecionalmente
+sem nenhum código manual adicional (testado: o HMR do Vite continua
+funcionando normalmente com os mocks ativos). Sem esse cuidado, QUALQUER
+`new WebSocket(...)` da página (não só o do app) passaria a ser
+interceptado, já que a interceptação reescreve o `WebSocket` GLOBAL do
+ambiente.
+
+**Limitação de transporte entre ambientes:** a interceptação só reescreve
+o `WebSocket` GLOBAL. Num bundle para browser — dev, build de demonstração,
+Playwright-em-browser (todos os ambientes reais desta aplicação) — o Vite
+resolve `socket.io-client` → `engine.io-client` para a variante que usa
+esse `WebSocket` global (confirmado inspecionando o campo `"browser"` do
+`package.json` de `engine.io-client`, que remapeia
+`transports/websocket.node.js` → `transports/websocket.js` só em bundlers).
+A interceptação funciona de ponta a ponta nesses ambientes — verificado
+manualmente tanto contra `npm run dev` quanto contra `vite preview` do
+build com `VITE_ENABLE_MOCKS=true` (handshake completo + evento
+`nft.updated` recebido). Em Node.js PURO (sem bundler, ex.: alguém rodando
+`server.ts` fora de um browser/jsdom), `socket.io-client` importa a
+variante que usa o pacote `ws` em vez do `WebSocket` global, e esta
+interceptação não a alcança — documentado também em `server.ts`. A
+aplicação real nunca roda em Node puro, então isto não afeta o produto;
+só um teste Node "cru" de WebSocket precisaria rodar num browser real.
+
+`@mswjs/socket.io-binding` declara peer dependency `msw@^2.10.2`; este
+projeto está em `msw@^3.0.3` (instalado com `--legacy-peer-deps`,
+registrado em `package.json`/`package-lock.json`). A API usada
+(`toSocketIo(connection)` operando sobre `connection.client`/
+`connection.server`, que são tipos de `@mswjs/interceptors`, não do `msw`)
+não mudou entre essas versões — só o roteamento por padrão do `ws.link()`
+do `msw`, contornado acima, foi afetado.
+
+`realtime/mutations.ts` é a ponte entre qualquer mutação no `MockDb` e os
+eventos: `applyNftUpdate()` (usada tanto pelo endpoint de controle quanto
+pela confirmação de pedido) incrementa `Nft.version` e emite `nft.updated`;
+`applyOrderStatusChange()` incrementa um contador de versão por pedido
+(`db.orderEventVersions`, não exposto no contrato `Order`) e emite
+`order.updated`. O envelope (`id`, `resource`, `resourceId`, `version`,
+`occurredAt`, `payload`) é exatamente o `RealtimeEventEnvelope` da Fase 0
+(`shared/types/events.ts`) — a tolerância a duplicata/evento antigo no
+cliente (Fase 6) se baseia neste `version` monotônico por recurso.
+
+### 8.8 Painel de controle (seleção/reset de cenário, disparo de eventos)
+
+Fora do contrato dos 8 recursos (seção 5) — usado só por testes/ferramentas,
+nunca por `features/*` de produto:
+
+| Via | Uso |
+| --- | --- |
+| `GET /api/__mock__/scenario` | Lê o `MockScenarioConfig` atual. |
+| `POST /api/__mock__/scenario` | Mescla um `Partial<MockScenarioConfig>` (arrays/objetos são SUBSTITUÍDOS, não mesclados item a item). |
+| `POST /api/__mock__/scenario/reset` | Volta a `defaultScenarioConfig()`. |
+| `POST /api/__mock__/reset` | `resetMockData()` + reset de cenário — "cenário conhecido" completo (seção 6). |
+| `POST /api/__mock__/simulate/nft-update` | `{ nftId, editionId?, priceEth?, availableQuantity? }` → muda o `MockDb` e emite `nft.updated` (roteiro da seção 7: NFT no carrinho muda de preço durante a navegação). |
+| `POST /api/__mock__/simulate/order-update` | `{ orderId, status: 'confirmed' \| 'refused' }` → força a resolução de um pedido (útil com `paymentOutcome: 'pending-forever'`, para simular a reconexão). |
+| `window.__mocks__` (`browser.ts`) | Mesmas operações acima, chamadas direto em JS (ex.: `page.evaluate(() => window.__mocks__.resetAll())` em Playwright) — sem round-trip HTTP. Só existe quando `VITE_ENABLE_MOCKS=true` e só no browser. |
+
+Ambos os caminhos (REST e `window.__mocks__`) existem porque alguns
+consumidores de teste preferem `page.request.post(...)` e outros preferem
+`page.evaluate(...)` direto — nenhum dos dois é consumido pelo código de
+produto.
+
+### 8.9 Validação manual desta entrega
+
+Rodado manualmente contra `npm run dev` e contra `vite preview` do build
+com `VITE_ENABLE_MOCKS=true` (Playwright headless, sem nenhuma suíte
+versionada — isso é a Fase 10/`agent-tests`): catálogo com busca/filtro/
+paginação, 404 de NFT inexistente, sessão `null`→401 sem login, login com
+credencial errada (400) e correta (200), favoritos/carrinho pré-semeados
+por usuário, cupom inválido (404)/expirado (409)/válido (200, com
+`quoteVersion` incrementando), carteiras, criação de pedido com
+idempotência (replay idêntico, payload divergente → 409), resolução
+`pending → confirmed` com débito de estoque e remoção dos itens do
+carrinho, cenário `pending-forever` resolvido manualmente via painel de
+controle, e o evento `nft.updated`/`order.updated` chegando por um
+`socket.io-client` real tanto em `npm run dev` quanto no build de
+demonstração servido por `vite preview`.
