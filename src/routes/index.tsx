@@ -1,27 +1,36 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import { CatalogGridSkeleton } from '@/features/catalog/components/catalog-grid-skeleton'
+import { catalogSearchSchema } from '@/features/catalog/search'
 
 /**
- * Placeholder da rota "/" (Início). As 9 telas da seção 3 do readme, busca
- * via parâmetros de URL, filtros e navegação para o NFT são escopo da Task
- * 1.1/4.1 (`agent-shell`/`agent-catalog`).
+ * Início (readme §3): destaques, catálogo, busca, filtros, ordenação e
+ * navegação para o NFT. Busca/filtros/ordenação/paginação já compõem o
+ * estado da URL via `validateSearch` (readme §3 "Catálogo e detalhe") —
+ * a Fase 4 (`agent-catalog`) consome `Route.useSearch()` para disparar
+ * `useNftsQuery` e renderizar a listagem real no lugar deste skeleton.
  */
 export const Route = createFileRoute('/')({
-  component: HomePlaceholder,
+  validateSearch: catalogSearchSchema,
+  component: HomePage,
 })
 
-function HomePlaceholder() {
+function HomePage() {
+  const search = Route.useSearch()
+
   return (
-    <main className="flex min-h-svh items-center justify-center p-8 text-center">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">NFT Marketplace</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Fundação (Fase 0) pronta — rotas, catálogo, carrinho e checkout chegam nas fases seguintes.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Destaques e catálogo chegam na Fase 4. Busca/filtros/ordenação/paginação já vivem na URL —{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            página {search.page}, {search.pageSize} por página
+            {search.search ? `, busca "${search.search}"` : ''}
+          </code>
+          .
         </p>
-        <Button className="mt-4" variant="outline">
-          shadcn/ui ok
-        </Button>
       </div>
-    </main>
+      <CatalogGridSkeleton />
+    </div>
   )
 }

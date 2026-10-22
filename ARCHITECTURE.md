@@ -1,17 +1,21 @@
 # Arquitetura — NFT Marketplace
 
-Este documento é o entregável de arquitetura das Tasks 0.1–0.3 do `PLAN.md`
-(Fase 0 — Fundação e contratos). Ele descreve o que foi montado: stack,
+Este documento é o entregável de arquitetura das Tasks 0.1–0.3 (Fase 0 —
+Fundação e contratos) e das Tasks 1.1–1.2 (Fase 1 — Shell, roteamento e
+design system) do `PLAN.md`. As seções 1–5 descrevem a Fase 0: stack,
 estrutura de pastas, contratos REST/tipos compartilhados, a chave de
 idempotência de pedido, a regra de precisão de valores em ETH, e a política
 de cache/retry/invalidação/cancelamento/isolamento do TanStack Query —
-incluindo a interação escolhida para atualização otimista com rollback.
+incluindo a interação escolhida para atualização otimista com rollback. A
+seção 6 descreve a Fase 1: as 9 rotas da seção 3 do readme, os guards de
+rota privada (com sessão mock provisória), o layout responsivo e os
+skeletons com shimmer.
 
-As fases seguintes (1–12, `PLAN.md`) implementam telas, mocks, tempo real,
-testes e deploy sobre esta fundação. Nada neste documento implementa fluxo
-de negócio — isso é escopo dos agentes `agent-shell`, `agent-mocks`,
-`agent-catalog`, `agent-cart`, `agent-realtime`, `agent-checkout`,
-`agent-account`, `agent-auth`.
+As fases seguintes (2–12, `PLAN.md`) implementam mocks, sessão real, tempo
+real, telas de produto, testes e deploy sobre esta fundação. Nada neste
+documento implementa fluxo de negócio de produto — isso é escopo dos
+agentes `agent-mocks`, `agent-auth`, `agent-catalog`, `agent-cart`,
+`agent-realtime`, `agent-checkout`, `agent-account`.
 
 ## 1. Stack e decisões de setup
 
@@ -25,7 +29,7 @@ de negócio — isso é escopo dos agentes `agent-shell`, `agent-mocks`,
 | HTTP | Axios 1.x | único client em `src/shared/api/http.ts` |
 | Tempo real | socket.io-client 4.x | fábrica tipada em `src/features/realtime/client/socket.ts` (conexão/reconciliação reais ficam para a Fase 6) |
 | Estilo | Tailwind CSS 4 | via `@tailwindcss/vite`, sem `tailwind.config.js` (config em `src/index.css`) |
-| Componentes | shadcn/ui (`-b radix`, preset `nova`) | `components.json`; tokens visuais de placeholder — Figma entra na Task 1.2 |
+| Componentes | shadcn/ui (`-b radix`, preset `nova`) | `components.json`; tokens visuais ainda placeholder (ver §6.5 — ninguém confrontou com o Figma real ainda) |
 | Mocking | MSW 3.x | `src/features/mocks` (handlers vazios até a Fase 2) |
 | E2E/visual | Playwright | `playwright.config.ts` + `tests/e2e` |
 | Performance | Lighthouse CI (`@lhci/cli`) | `lighthouserc.cjs` |
@@ -294,24 +298,173 @@ imediata + skeleton (Task 1.2), não otimismo de dado monetário.
   duplicata/evento antigo, desconexão por sessão) — Fase 6 (`agent-realtime`).
   `src/features/realtime/client/socket.ts` só fabrica o client tipado,
   desconectado por padrão.
-- Qualquer tela/fluxo de produto (catálogo, carrinho, checkout, perfil,
-  carteiras, login/cadastro) e o shell/design tokens do Figma — Fases 1, 3–8
-  (`agent-shell`, `agent-auth`, `agent-catalog`, `agent-cart`,
-  `agent-checkout`, `agent-account`).
+- Lógica de negócio de qualquer tela (catálogo, carrinho, checkout, perfil,
+  carteiras, login/cadastro real) — Fases 3–8 (`agent-auth`, `agent-catalog`,
+  `agent-cart`, `agent-checkout`, `agent-account`). A Fase 1 (`agent-shell`,
+  seção 6 abaixo) só entrega o "casco": rotas, guards, layout e skeletons.
 - Suites Playwright reais dos 12 cenários da seção 9 — Fase 10
   (`agent-tests`). `tests/e2e/smoke.spec.ts` só comprova que o pipeline de
   teste roda de ponta a ponta.
 - Lighthouse com thresholds em `error` e páginas reais — Fase 11
   (`agent-quality`).
 
-## 6. Scripts (readme §12)
+## 6. Shell, rotas e sessão mock (Fase 1 — Tasks 1.1/1.2, `agent-shell`)
+
+Esta seção documenta o que a Fase 1 adicionou sobre a fundação das seções
+1–4: as 9 rotas da seção 3 do readme, os guards de rota privada, o layout
+responsivo e os skeletons com shimmer. Nenhum item aqui implementa fluxo de
+negócio (isso são as Fases 3–8) — é só o "casco" navegável.
+
+### 6.1 Rotas (TanStack Router, file-based)
+
+| Tela (readme §3) | Rota | Arquivo | Privada? |
+| --- | --- | --- | --- |
+| Início | `/` | `src/routes/index.tsx` | Não |
+| Detalhes do NFT | `/nfts/$nftId` | `src/routes/nfts.$nftId.tsx` | Não |
+| Carrinho de NFTs | `/cart` | `src/routes/cart.tsx` | Não |
+| Pagamento | `/checkout` | `src/routes/checkout.tsx` | Sim |
+| Confirmação de pedido | `/orders/$orderId` | `src/routes/orders.$orderId.tsx` | Sim |
+| Login | `/login` | `src/routes/login.tsx` | Não |
+| Cadastro | `/register` | `src/routes/register.tsx` | Não |
+| Perfil do colecionador | `/account/profile` | `src/routes/account.profile.tsx` | Sim |
+| Carteiras | `/account/wallets` | `src/routes/account.wallets.tsx` | Sim |
+
+`/cart` **não** é privada: readme §3 "Carrinho" exige "preservar os itens do
+visitante ao autenticar", ou seja, um carrinho de visitante precisa existir
+sem login. As 4 rotas privadas batem com readme §3 "Conta e sessão"
+("Checkout, perfil, carteiras... exigem autenticação") — "favoritos" não é
+uma tela própria entre as 9 (vive dentro do catálogo/detalhe) e "pedidos" é
+coberto por `/orders/$orderId` (a tela de confirmação).
+
+Parâmetros de busca tipados (readme §3 "Catálogo e detalhe" + §4):
+
+- `/` reaproveita o contrato `NftListQuery` (`shared/types/nft.ts`) como
+  schema de busca — mesmo shape na URL e na API, sem tradução — via
+  `src/features/catalog/search.ts#catalogSearchSchema`. `page`/`pageSize`
+  sempre têm default (1/12) e aparecem resolvidos na URL após qualquer
+  navegação; os demais campos (`search`, `category[]`, `priceMinEth`,
+  `priceMaxEth`, `sortKey`, `sortOrder`) ficam `undefined` quando ausentes/
+  inválidos. A Fase 4 (`agent-catalog`) consome `Route.useSearch()`
+  diretamente como `NftListQuery` para `useNftsQuery`.
+- `/nfts/$nftId` aceita `editionId` opcional (deep link para uma edição
+  específica).
+- `/login` aceita `redirect` opcional (ver guard abaixo).
+
+Nota de tipagem: como `NftListQuery.page`/`pageSize` são obrigatórios no
+contrato (Fase 0), `catalogSearchSchema` usa o escape hatch `SearchSchemaInput`
+do TanStack Router para declarar a entrada de navegação (`<Link to="/">`)
+como `Partial<NftListQuery>` (tudo opcional) mantendo a saída
+(`Route.useSearch()`) como `NftListQuery` completo e resolvido — sem isso,
+todo link para `/` seria obrigado a passar `page`/`pageSize` explicitamente.
+
+### 6.2 Rota inexistente e acesso direto
+
+`src/routes/__root.tsx` define `notFoundComponent` na rota raiz, usado tanto
+quando nenhuma rota casa com o caminho (acesso direto a uma URL inventada)
+quanto quando uma rota filha lançar `notFound()` explicitamente (ex.: NFT
+inexistente, Fase 4). Todas as 9 rotas são code-split
+(`autoCodeSplitting: true` no plugin) e foram testadas manualmente com
+acesso direto por URL colada + refresh (ver 6.3).
+
+### 6.3 Guard de rota privada — sessão mock (PROVISÓRIO)
+
+A sessão real (login/logout via API, expiração, limpeza de cache — Fase 3,
+`agent-auth`) ainda não existe. Para poder testar os guards agora, a Fase 1
+introduz uma sessão de brinquedo em `src/shared/session/`:
+
+- `mockSession.ts` — guarda um usuário fictício em `localStorage`
+  (`nft-marketplace:mock-session`), com `login`/`logout`/`isAuthenticated`/
+  `get`/`subscribe`. Lê sempre direto do `localStorage` (sem cache além do
+  necessário para `useSyncExternalStore` — ver nota de implementação no
+  próprio arquivo sobre por que a leitura precisa devolver a mesma
+  referência quando o valor não mudou, senão o React entra em loop de
+  re-render).
+- `useMockSession.ts` — hook reativo (`useSyncExternalStore`) usado pelo
+  header para alternar Login/Cadastro ↔ Perfil/Carteiras/Sair.
+- `requireAuth.ts` — guard usado no `beforeLoad` das 4 rotas privadas:
+  lança `redirect({ to: '/login', search: { redirect: location.href } })`
+  quando deslogado. `location.href` já inclui path + querystring, então um
+  link privado com parâmetros (ex.: um checkout com carrinho específico)
+  retoma exatamente onde parou.
+- `safeRedirect.ts` — `/login` só aceita `redirect` se for um caminho
+  interno (`/algo`); qualquer valor absoluto ou `//host` cai no fallback
+  `/`, para não abrir um open-redirect a partir de um link de login
+  manipulado.
+- `/login` e `/register` têm um botão "(simulado)" que autentica
+  instantaneamente (sem formulário/validação/API) só para exercitar o
+  guard + retomada ponta a ponta. Isso **não** é o login real exigido pela
+  seção 3 do readme — é descartável e será substituído na Fase 3.
+
+`agent-auth` deve: (1) substituir `mockSession` por sessão real baseada em
+`useSessionQuery`/`useLoginMutation`/`useLogoutMutation` (já existentes em
+`features/account/hooks/useSessionQuery.ts`, plumbing da Fase 0); (2) manter
+a mesma assinatura de `requireAuth` (ou equivalente) nas 4 rotas privadas;
+(3) não deixar nenhum import de `mockSession` sobrevivendo fora de
+`src/shared/session/` após a troca.
+
+Validado manualmente (fluxo completo, ver histórico de execução desta
+task): acesso direto a `/account/profile` deslogado → redireciona para
+`/login?redirect=%2Faccount%2Fprofile` → login simulado → retoma em
+`/account/profile` → refresh mantém a sessão (via `localStorage`) → logout
+→ acesso direto a `/account/wallets` → redireciona de novo. `/checkout` e
+`/orders/$orderId` seguem o mesmo guard.
+
+### 6.4 Layout responsivo
+
+`src/components/layout/app-shell.tsx` envolve toda a árvore de rotas
+(montado em `src/routes/__root.tsx`): `SiteHeader` (logo + nav + sessão) +
+`<main>` com container centralizado (`max-w-6xl`, padding responsivo) +
+`SiteFooter`. `SiteHeader` colapsa a navegação num painel de disclosure
+abaixo de `md` (768px) — testado nos três breakpoints do readme §8 (390,
+768, 1440) sem overflow horizontal.
+
+### 6.5 Design tokens — placeholder (readme §1)
+
+O link do Figma real não está acessível neste ambiente de execução. Os
+tokens usados (cores claro/escuro, radius, a fonte `Geist Variable`, escala
+de espaçamento/tipografia do Tailwind v4) são os do preset `shadcn/ui`
+"radix-nova" já configurado na Fase 0 (`src/index.css`) — um sistema neutro
+e consistente, **não** a identidade visual final do desafio. Isso está
+marcado explicitamente como placeholder no próprio `src/index.css` (comentário
+acima do bloco de tokens). Antes da entrega final, alguém com acesso ao
+Figma precisa: conferir paleta de cores, família/escala tipográfica e
+espaçamentos contra o layout real, e ajustar as variáveis em `:root`/`.dark`
+e `@theme inline` de acordo — sem precisar tocar nos componentes que as
+consomem (`Button`, `Skeleton`, etc. usam só as variáveis semânticas).
+
+### 6.6 Skeletons com shimmer (readme §8)
+
+- `src/components/ui/skeleton.tsx` — primitivo (`<Skeleton />`), aplica a
+  classe utilitária `.skeleton-shimmer` (`src/index.css`): gradiente linear
+  animado via `background-position` (não `animate-pulse` do Tailwind, para
+  poder desligar só o movimento em `prefers-reduced-motion: reduce` —
+  verificado via `page.emulateMedia({ reducedMotion: 'reduce' })` que
+  `animationName` vira `none` sem remover o elemento nem suas dimensões).
+  Quem usa o primitivo é responsável por fixar `h-*`/`w-*`/`aspect-*` iguais
+  ao conteúdo final, para não haver layout shift quando o dado real
+  substituir o skeleton.
+- `src/features/catalog/components/catalog-grid-skeleton.tsx` +
+  `nft-card-skeleton.tsx` — grade do catálogo (Início), mesmo grid
+  responsivo (2/3/4 colunas) que a Fase 4 usará.
+- `src/features/catalog/components/nft-detail-skeleton.tsx` — duas colunas
+  (galeria + informações/compra) do detalhe do NFT.
+- `src/features/cart/components/cart-summary-skeleton.tsx` — linhas de item
+  + bloco de totais (subtotal/desconto/taxa de rede/total) do resumo do
+  carrinho.
+
+As três páginas correspondentes (`/`, `/nfts/$nftId`, `/cart`) já renderizam
+esses skeletons como conteúdo placeholder (não há dado real ainda); as
+Fases 4/5 trocam o skeleton pelo conteúdo definitivo quando `isLoading` for
+`true`, mantendo os mesmos componentes.
+
+## 7. Scripts (readme §12)
 
 | Script | Comando | Status verificado nesta entrega |
 | --- | --- | --- |
-| `npm run dev` | `vite` | sobe em `http://localhost:<porta>/`, placeholder renderiza, HMR ok |
-| `npm run build` | `tsc -b && vite build` | build de produção gerado em `dist/` sem erros |
+| `npm run dev` | `vite` | sobe em `http://localhost:<porta>/`, as 9 rotas (Fase 1) resolvem, HMR ok |
+| `npm run build` | `tsc -b && vite build` | build de produção gerado em `dist/` sem erros, 9 rotas code-split |
 | `npm run preview` | `vite preview` | serve o build de `dist/`, `200` na raiz |
 | `npm run typecheck` | `tsc -b` | 0 erros |
 | `npm run lint` | `oxlint` | 0 warnings/erros no código do projeto (overrides documentados acima) |
-| `npm run test:e2e` | `playwright test` | 2/2 passam (`chromium-desktop` + `chromium-mobile`) contra o placeholder |
+| `npm run test:e2e` | `playwright test` | 2/2 passam (`chromium-desktop` + `chromium-mobile`) contra o shell/skeleton da Fase 1 |
 | `npm run lighthouse` | `lhci autorun` | roda 3 medições, grava relatórios em `.lighthouseci/`, assertions em `warn` (ver seção 1) |

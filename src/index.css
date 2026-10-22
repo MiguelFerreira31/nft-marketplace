@@ -8,10 +8,58 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design tokens (cores, tipografia, espaçamentos extraídos do Figma) são
- * responsabilidade da Task 1.2 (agent-shell). Este arquivo só garante que o
- * pipeline do Tailwind v4 está ativo para o restante do projeto.
+ * Design tokens (Task 1.2, agent-shell)
+ * ------------------------------------------------------------------
+ * PLACEHOLDER: o link do Figma real (readme.md, seção 1) não está acessível
+ * neste ambiente de execução. Os tokens abaixo (e os herdados do preset
+ * `shadcn/ui` "radix-nova" em `:root`/`.dark`, mais abaixo neste arquivo —
+ * cores, radius, fonte Geist Variable) são um sistema neutro e consistente
+ * (claro + escuro), NÃO a identidade visual final. Ver `ARCHITECTURE.md`
+ * (seção "Design tokens") para o registro formal deste desvio: alguém com
+ * acesso ao Figma deve conferir e ajustar cores/tipografia/espaçamentos
+ * antes da entrega final — nenhuma tela deve ser considerada "fiel ao
+ * Figma" só por usar estes tokens.
  */
+
+/*
+ * Shimmer dos skeletons (Task 1.2 — readme §8: "skeletons com shimmer
+ * effect... preserve as dimensões do conteúdo... respeite a preferência por
+ * movimento reduzido"). Implementado como utilitário puro de CSS (não
+ * `animate-pulse` do Tailwind) para poder desligar a animação por completo
+ * em `prefers-reduced-motion: reduce` sem remover o skeleton nem alterar
+ * layout/dimensões — só o movimento.
+ */
+@layer utilities {
+  .skeleton-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      color-mix(in oklch, var(--muted), var(--foreground) 10%) 50%,
+      var(--muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    /* Mantém um gradiente estático (em vez de uma cor lisa) para que o
+       estado de carregamento ainda seja perceptível sem depender de
+       movimento. */
+    background-position: 50% 0;
+  }
+}
 
 @layer base {
   :root {
