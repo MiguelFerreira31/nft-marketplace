@@ -45,6 +45,20 @@ function toEnum<T extends string>(value: unknown, allowed: readonly T[]): T | un
 }
 
 /**
+ * O parser de querystring do router decodifica um valor numérico sem aspas
+ * (ex.: uma URL editada manualmente ou um link externo, `?priceMinEth=0.5`)
+ * como `number`, não `string` — `priceMinEth`/`priceMaxEth` do contrato são
+ * `EthAmount` (string decimal). Sem essa coerção, esse valor cairia no
+ * `undefined` do `typeof === 'string'` e o filtro seria descartado em
+ * silêncio, sem nenhum aviso ao usuário.
+ */
+function toPriceString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return undefined
+}
+
+/**
  * Shape aceito por quem NAVEGA para `/` (ex.: `<Link to="/" search={...} />`)
  * — todos os campos opcionais, porque `page`/`pageSize` têm default aplicado
  * por `catalogSearchSchema`. O `& SearchSchemaInput` é o escape hatch do
@@ -65,8 +79,8 @@ export function catalogSearchSchema(search: CatalogSearchInput): NftListQuery {
   return {
     search: typeof raw.search === 'string' && raw.search.length > 0 ? raw.search : undefined,
     category: toStringArray(raw.category),
-    priceMinEth: typeof raw.priceMinEth === 'string' ? raw.priceMinEth : undefined,
-    priceMaxEth: typeof raw.priceMaxEth === 'string' ? raw.priceMaxEth : undefined,
+    priceMinEth: toPriceString(raw.priceMinEth),
+    priceMaxEth: toPriceString(raw.priceMaxEth),
     sortKey: toEnum(raw.sortKey, SORT_KEYS),
     sortOrder: toEnum(raw.sortOrder, SORT_ORDERS),
     page: toPositiveInt(raw.page, CATALOG_SEARCH_DEFAULTS.page),
