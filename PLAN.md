@@ -343,17 +343,46 @@ Agente: `agent-quality` · Validador: `val-a11y`
 > por não ter passado por gate de validação daquelas fases já fechadas. A
 > ideia em si é válida (melhora contraste do foco) — avaliar e implementar
 > aqui, com o gate normal desta fase, se fizer sentido.
+>
+> **Resolvido nesta fase** (`agent-quality`, ver `ARCHITECTURE.md` §15.2):
+> simplesmente remover a opacidade não bastava — `--ring` em modo claro
+> (`oklch(0.708 0 0)`) ficava em 2,59:1 mesmo opaco, abaixo do 3:1 exigido
+> por WCAG 1.4.11. Corrigido escurecendo `--ring` claro para
+> `oklch(0.556 0 0)` (reaproveita o tom já usado por `--muted-foreground`)
+> **e** removendo a opacidade de todo `ring-ring/50`/`outline-ring/50` do
+> projeto — resultado 4,73:1 (claro) / 4,18:1 (escuro). O anel de erro
+> (`ring-destructive/20`/`/40`) foi mantido como está, fora do escopo
+> ("anel de foco", não anel de erro) e já coberto por borda opaca + mensagem
+> de erro associada — números registrados em `ARCHITECTURE.md` §15.2 para
+> uma fase futura decidir se vale endurecer também.
 
-- [ ] Navegação por teclado e foco visível em todas as telas.
-- [ ] Controle de foco em diálogos/drawers (trap + retorno ao gatilho).
-- [ ] Semântica, labels, mensagens de erro associadas aos campos.
-- [ ] Alternativas textuais para imagens relevantes.
-- [ ] Contraste legível; nenhum estado dependente só de cor.
-- [ ] Feedback acessível (aria-live ou equivalente) para mutations e eventos
-      em tempo real.
-- [ ] Sem overflow horizontal indevido; sem perda de conteúdo em zoom.
-- [ ] Documentar qualquer substituição de asset/ajuste de acessibilidade vs.
-      Figma.
+- [x] Navegação por teclado e foco visível em todas as telas. Achado e
+      corrigido: checkbox `sr-only` dos filtros de categoria do catálogo
+      (`catalog-toolbar.tsx`) não tinha nenhum indicador de foco visível —
+      `has-[:focus-visible]:ring-*` no `<label>` resolve. Demais telas
+      (incluindo Pagamento/Confirmação, sem auditoria dedicada até agora)
+      sem achados — ver `ARCHITECTURE.md` §15.1–15.3.
+- [x] Controle de foco em diálogos/drawers (trap + retorno ao gatilho). Não
+      aplicável: nenhum diálogo/drawer/sheet/popover existe no projeto
+      (inventário em `ARCHITECTURE.md` §15.4). O menu mobile do `SiteHeader`
+      é um disclosure inline (não modal), não exige trap.
+- [x] Semântica, labels, mensagens de erro associadas aos campos. Auditado
+      especificamente catálogo (filtros), carrinho (cupom/quantidade) e
+      checkout (carteira/rede) — sem achados, ver `ARCHITECTURE.md` §15.5.
+- [x] Alternativas textuais para imagens relevantes — ver `ARCHITECTURE.md`
+      §15.6.
+- [x] Contraste legível; nenhum estado dependente só de cor — ver
+      `ARCHITECTURE.md` §15.2/§15.7.
+- [x] Feedback acessível (aria-live ou equivalente) para mutations e eventos
+      em tempo real. Auditado especificamente carrinho, checkout e os
+      banners de preço/disponibilidade da Fase 6 — sem achados, ver
+      `ARCHITECTURE.md` §15.8.
+- [x] Sem overflow horizontal indevido; sem perda de conteúdo em zoom —
+      testado em 320/390/768/1440px e com zoom CSS 1.5×/2×/3× nas 9 rotas
+      (incluindo fluxo de compra completo até confirmação) — sem achados,
+      ver `ARCHITECTURE.md` §15.9.
+- [x] Documentar qualquer substituição de asset/ajuste de acessibilidade vs.
+      Figma — ver `ARCHITECTURE.md` §15.10.
 
 **Gate:** `val-a11y` roda auditoria WCAG 2.1 AA em todas as 9 telas (desktop +
 mobile) antes de liberar a Fase 10.

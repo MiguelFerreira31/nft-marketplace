@@ -131,7 +131,7 @@ export function CatalogToolbar({ search, onApplyFilters, onClearFilters }: Catal
                 const option = CATALOG_SORT_OPTIONS.find((candidate) => candidate.id === event.target.value)
                 if (option) onApplyFilters({ sortKey: option.sortKey, sortOrder: option.sortOrder })
               }}
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring dark:bg-input/30"
             >
               {CATALOG_SORT_OPTIONS.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -153,12 +153,22 @@ export function CatalogToolbar({ search, onApplyFilters, onClearFilters }: Catal
             return (
               <label
                 key={option.value}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium outline-none transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring ${
                   checked
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-border bg-background text-muted-foreground hover:text-foreground'
                 }`}
               >
+                {/*
+                 * O `<input>` real fica `sr-only` (o chip visual acima é que
+                 * reage a `checked`/hover) mas PRECISA continuar focável por
+                 * teclado — sem nenhum estilo próprio, um `sr-only` comum é
+                 * invisível mesmo quando focado, deixando o Tab "sem foco
+                 * visível" nos filtros de categoria (achado da Fase 9,
+                 * `ARCHITECTURE.md`). `has-[:focus-visible]:ring-*` no
+                 * `<label>` (via `:has()`) devolve um anel de foco visível em
+                 * volta do chip quando o checkbox real recebe foco.
+                 */}
                 <input
                   type="checkbox"
                   className="sr-only"

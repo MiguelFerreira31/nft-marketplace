@@ -314,7 +314,7 @@ function CheckoutPage() {
                     <Label htmlFor="checkout-wallet">Carteira cadastrada</Label>
                     <select
                       id="checkout-wallet"
-                      className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
+                      className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-60"
                       value={selectedWalletId}
                       disabled={Boolean(attempt)}
                       onChange={(event) => {
@@ -335,7 +335,7 @@ function CheckoutPage() {
                     <Label htmlFor="checkout-network">Rede da carteira</Label>
                     <select
                       id="checkout-network"
-                      className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
+                      className="h-9 min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-60"
                       value={selectedNetwork}
                       disabled={Boolean(attempt)}
                       onChange={(event) => {

@@ -19,6 +19,14 @@
  * acesso ao Figma deve conferir e ajustar cores/tipografia/espaçamentos
  * antes da entrega final — nenhuma tela deve ser considerada "fiel ao
  * Figma" só por usar estes tokens.
+ *
+ * Fase 9 (`agent-quality`, ver `ARCHITECTURE.md` "Acessibilidade — Fase 9"):
+ * `--ring` (modo claro) foi escurecido de `oklch(0.708 0 0)` para
+ * `oklch(0.556 0 0)` e todo uso de `ring-ring/50`/`outline-ring/50` no
+ * projeto foi trocado por `ring-ring`/`outline-ring` (opacidade cheia) — o
+ * anel de foco translúcido original não alcançava 3:1 de contraste
+ * (WCAG 1.4.11) contra o fundo claro. Números e metodologia documentados no
+ * `ARCHITECTURE.md`.
  */
 
 /*
@@ -76,7 +84,7 @@
     min-height: 100svh;
   }
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html {
     @apply font-sans;
@@ -148,7 +156,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

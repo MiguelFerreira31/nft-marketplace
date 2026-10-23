@@ -33,7 +33,7 @@ export function NftCard({ nft }: NftCardProps) {
         <FavoriteButton nft={nft} size="icon-sm" className="absolute top-2 right-2" />
       </div>
 
-      <Link to="/nfts/$nftId" params={{ nftId: nft.id }} className="flex flex-col gap-1 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      <Link to="/nfts/$nftId" params={{ nftId: nft.id }} className="flex flex-col gap-1 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring">
         <h3 className="truncate text-sm font-medium text-foreground">{nft.title}</h3>
         <p className="truncate text-xs text-muted-foreground">{nft.collection.name}</p>
       </Link>

@@ -34,7 +34,7 @@ export function NftGallery({ images, title }: NftGalleryProps) {
               aria-label={`Ver imagem ${index + 1} de ${images.length}`}
               onClick={() => setActiveIndex(index)}
               className={cn(
-                'size-16 shrink-0 overflow-hidden rounded-lg border-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                'size-16 shrink-0 overflow-hidden rounded-lg border-2 outline-none focus-visible:ring-3 focus-visible:ring-ring',
                 index === safeIndex ? 'border-primary' : 'border-transparent hover:border-border',
               )}
             >

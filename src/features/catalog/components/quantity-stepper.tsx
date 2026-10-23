@@ -50,7 +50,7 @@ export function QuantityStepper({ value, max, onChange, disabled = false }: Quan
           value={value}
           disabled={isDisabled}
           onChange={(event) => onChange(clamp(Number(event.target.value)))}
-          className="h-7 w-14 rounded-lg border border-input bg-transparent px-2 text-center text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+          className="h-7 w-14 rounded-lg border border-input bg-transparent px-2 text-center text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-50"
         />
         <Button
           type="button"

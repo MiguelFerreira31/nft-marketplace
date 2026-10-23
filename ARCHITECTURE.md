@@ -1588,3 +1588,261 @@ dos tokens `--input`/`--ring`) sem passar pelo gate das fases 1/4/7 já
 fechadas. Esse ajuste foi **revertido** (não descartado como ideia — ver
 nota na Fase 9 do `PLAN.md`) para manter a disciplina de que nenhuma fase
 mexe em código de uma fase anterior já validada sem o gate daquela fase.
+
+## 15. Acessibilidade — Fase 9 (`agent-quality`)
+
+Esta seção documenta a parte de **acessibilidade** da Fase 9 do `PLAN.md`
+(a parte de performance/Lighthouse é a Fase 11, documentada separadamente).
+Escopo: as 9 telas (Início, Detalhe do NFT, Carrinho, Pagamento, Confirmação
+de pedido, Login, Cadastro, Perfil, Carteiras), auditadas em desktop e mobile
+contra os 8 itens do readme §8. Nada nesta fase altera contrato REST/evento,
+cache ou lógica de negócio — só CSS/markup de acessibilidade.
+
+### 15.1 Metodologia
+
+Em vez de confiar só em leitura de código, cada achado abaixo foi confirmado
+por execução real contra `npm run dev` (`VITE_ENABLE_MOCKS=true`) com
+Playwright ad hoc (não versionado — mesmo padrão de "validação manual" já
+usado nas Fases 4–8 deste documento):
+
+- **Contraste do anel de foco**: calculado analiticamente (conversão
+  OKLCH → sRGB linear → luminância relativa WCAG, replicando a fórmula do
+  próprio Chromium) e depois confirmado lendo `getComputedStyle` de
+  elementos focados de verdade no browser (`outlineColor`, `boxShadow`).
+- **Overflow horizontal / zoom (readme §8: "ausência de overflow horizontal
+  indevido e perda de conteúdo com zoom")**: `document.documentElement.
+  scrollWidth` vs `clientWidth` nas 9 rotas (incluindo carrinho vazio/com
+  itens, pedido pendente→confirmado) em 320/390/768/1440px — 320px é a
+  técnica padrão para equivaler a zoom de 400% a partir de uma referência de
+  1280px (WCAG 1.4.10 Reflow) — mais uma checagem com `zoom` CSS em
+  1.5×/2×/3× sobre 1440px como confirmação adicional.
+- **Teclado só-teclado**: tabulação real (`page.keyboard.press('Tab'
+  /'Space')`) para confirmar ordem de foco, menu mobile por disclosure e
+  operação do filtro de categoria (ver 15.3) sem mouse.
+- Login real via mocks (`ana@example.com`/`bruno@example.com`,
+  `Colecionar123!`) para alcançar as rotas privadas (carrinho com itens vs.
+  vazio, checkout, confirmação de pedido confirmado).
+
+### 15.2 Achado e correção: anel de foco sem contraste suficiente (WCAG 1.4.11)
+
+Confirmando a nota herdada do gate da Fase 8 (`PLAN.md`, Fase 9): o anel de
+foco (`focus-visible:ring-3 ring-ring/50`, usado em `button.tsx`, `input.tsx`
+e nos campos/links de catálogo/checkout) e o outline nativo padrão
+(`* { outline-ring/50 }`, `index.css`) usavam o token `--ring` com opacidade
+`/50`. Cálculo (achromatic OKLCH ⇒ luminância relativa = L³, fórmula
+verificada por round-trip OKLab→sRGB linear→gama; compositing alfa simulado
+em espaço gama, igual ao comportamento real do Chromium):
+
+| Cenário | Contraste vs. fundo | Passa 3:1 (1.4.11)? |
+| --- | --- | --- |
+| `--ring` antigo (`oklch(0.708 0 0)`) opaco vs. branco | 2,59:1 | Não |
+| `--ring` antigo com `/50` vs. branco (como estava em produção) | 1,55:1 | Não |
+| `--ring` novo (`oklch(0.556 0 0)`) opaco vs. branco | 4,73:1 | Sim |
+| `--ring` modo escuro (`oklch(0.556 0 0)`, já sem opacidade) vs. fundo escuro | 4,18:1 | Sim |
+
+Ou seja: **só remover a opacidade não bastava** — o próprio tom claro de
+`--ring` (`L=0.708`) já ficava abaixo de 3:1 mesmo opaco contra fundo branco.
+A correção aplicada:
+
+1. `--ring` no modo claro (`:root`, `index.css`) mudou de
+   `oklch(0.708 0 0)` para `oklch(0.556 0 0)` — reaproveita o MESMO valor já
+   usado por `--muted-foreground` (nenhum tom novo inventado fora da paleta
+   existente, consistente com o caráter de placeholder neutro já registrado
+   em §6.5). O modo escuro (`.dark { --ring: oklch(0.556 0 0) }`) já não
+   precisava de ajuste — só perdia contraste por causa da opacidade.
+2. Toda classe `ring-ring/50`/`outline-ring/50` do projeto perdeu o `/50`:
+   `src/index.css` (regra global `*`), `button.tsx`, `input.tsx`,
+   `catalog-toolbar.tsx` (select de ordenação), `nft-card.tsx` (link do
+   título), `nft-gallery.tsx` (miniaturas), `quantity-stepper.tsx` (campo de
+   quantidade) e `checkout.tsx` (selects de carteira/rede — 2 ocorrências).
+   `account.profile.tsx`/`account.wallets.tsx` já usavam `ring-ring` sem
+   opacidade (Fases 3/8) — sem alteração, apenas passam a herdar o `--ring`
+   mais escuro automaticamente.
+3. O anel de erro (`aria-invalid:ring-destructive/20`/`/40`,
+   `focus-visible:ring-destructive/40`/`20` em `button.tsx`) foi
+   deliberadamente **mantido** com opacidade — fora do escopo da nota
+   herdada ("anel de **foco**", não o anel de erro) e não é o único meio de
+   perceber o estado inválido: `aria-invalid:border-destructive` (borda
+   sólida, opaca, 4,77:1 contra branco) já marca a borda com contraste
+   pleno, e todo campo inválido do app já tem mensagem de erro associada via
+   `aria-describedby` (readme §8: "mensagens de erro associadas aos
+   campos") — o halo translúcido é reforço visual, não a única pista.
+   Números para registro, caso uma fase futura queira endurecer isto também:
+   opaco 4,77:1 (claro)/6,84:1 (escuro); `/40` cai para 2,11:1/1,95:1; `/20`
+   cai para 1,44:1.
+
+Blast radius confirmado antes da troca: `--ring` só é consumido pelas 10
+ocorrências acima (grep em `src/**`) — nenhum componente de seleção
+(checkbox/switch/radio nativo do shadcn) existe no projeto para herdar o
+tom antigo "por engano", e `--sidebar-ring` é uma variável independente
+(valor próprio, não referencia `--ring`), então não foi afetada.
+
+Confirmado via `getComputedStyle` em elemento focado de verdade (dev
+server): `outlineColor: oklch(0.556 0 0)`, `outlineStyle: auto` no link do
+cabeçalho (antes dependia só da opacidade do token); `boxShadow` com
+`oklch(0.556 0 0) 0px 0px 0px 3px` (opaco, sem canal alfa) nos botões/campos
+com `focus-visible:ring-3`.
+
+### 15.3 Achado e correção: checkbox de filtro de categoria sem foco visível
+
+`catalog-toolbar.tsx` (filtros do Início, auditado especificamente por este
+item do `PLAN.md`): cada chip de categoria é um `<label>` com um
+`<input type="checkbox" className="sr-only">` real por dentro (correto para
+semântica/operação por teclado — `Tab` chega ao checkbox de verdade, `Space`
+alterna). Mas `sr-only` (`position: absolute; width/height: 1px; overflow:
+hidden; clip: rect(0,0,0,0)`) deixa o próprio elemento focado visualmente
+imperceptível, e o `<label>` ao redor não tinha nenhum estilo de
+`:focus-within`/`:has(:focus-visible)` — resultado: um usuário tabulando
+pelos filtros via teclado **não via nenhum indicador de foco** ao passar
+pelos chips de categoria (violação direta do readme §8: "navegação por
+teclado e foco visível").
+
+Corrigido com a pseudo-classe `:has()` do Tailwind (`has-[:focus-visible]:
+ring-3 has-[:focus-visible]:ring-ring` no próprio `<label>`): quando o
+`<input>` interno recebe foco de teclado, o chip visível ganha o mesmo anel
+de foco usado no resto do app. Confirmado por execução real: `Tab` até o
+primeiro chip + leitura de `boxShadow` do `<label>` mostra
+`oklch(0.556 0 0) 0px 0px 0px 3px`; `Space` alterna o `checked` do input
+(`false → true`) e a URL é atualizada com o filtro (`?category=["art"]`),
+provando que a correção não alterou a operação por teclado, só a
+visibilidade do foco.
+
+### 15.4 Diálogos e drawers (readme §8: "controle de foco em diálogos e drawers")
+
+**Não aplicável** — confirmado por inventário: não existe nenhum componente
+de diálogo/drawer/sheet/popover/dropdown no projeto (`src/components/ui/`
+só tem `alert.tsx`, `button.tsx`, `input.tsx`, `label.tsx`, `skeleton.tsx`;
+nenhum `dialog.tsx`/`sheet.tsx`/`popover.tsx`/`dropdown-menu.tsx` foi
+instalado do shadcn). O único widget comparável é o menu mobile do
+`SiteHeader` (`aria-expanded`/`aria-controls="mobile-nav"` no botão de
+disclosure) — não é modal: o painel de navegação é revelado **dentro do
+fluxo normal da página** (não em overlay/portal), então não bloqueia
+interação com o resto da página nem precisa de *focus trap*/retorno de foco
+ao gatilho (esses requisitos são específicos de diálogo modal, WAI-ARIA
+Dialog (Modal) Pattern — o padrão aqui é Disclosure, que não os exige).
+Confirmado por execução real: abrir o menu mobile e pressionar `Tab` move o
+foco para o primeiro link revelado dentro do painel, na ordem normal do
+DOM — sem trap, sem foco "perdido" fora da tela.
+
+### 15.5 Semântica, labels e erros associados — catálogo/carrinho/checkout
+
+Auditados especificamente por este item (login/cadastro/perfil/carteiras já
+haviam sido confirmados nas Fases 3/8 — ver §9.1 e §14): **nenhum achado**.
+
+- **Catálogo** (`catalog-toolbar.tsx`): busca, preço mín./máx. e ordenação
+  têm `<Label htmlFor>` associado por `useId()`; categorias usam
+  `<fieldset>`/`<legend>` + `role="group" aria-labelledby`.
+- **Carrinho** (`cart-item-row.tsx`, `coupon-form.tsx`): quantidade reusa o
+  `QuantityStepper` com `<Label>` + botões com `aria-label` ("Diminuir/
+  Aumentar quantidade"); erro de cupom tem `id` próprio referenciado por
+  `aria-describedby` no `<Input>`, com `aria-invalid` sincronizado ao estado
+  da mutation.
+- **Checkout** (`checkout.tsx`): carteira/rede usam `<Label htmlFor>` com
+  `id` casando com o `<select>`; estado de conexão é texto explícito
+  (`role="status"`), nunca só um ícone/cor.
+
+### 15.6 Alternativas textuais para imagens
+
+Revisadas todas as ocorrências de `<img>` do app: capa do card de catálogo e
+foto de item do carrinho usam `alt=""` deliberado (decorativas — o título
+textual adjacente, dentro do mesmo link/linha, já é a informação acessível;
+duplicar o título no `alt` seria redundante para leitor de tela). Imagem
+principal da galeria do detalhe usa `alt` descritivo
+(`"${título} — imagem X de Y"`); miniaturas da galeria usam `alt=""` porque
+o `<button>` que as envolve já tem `aria-label` próprio ("Ver imagem X de
+Y"). Avatar do perfil usa `alt="Avatar de ${nome}"`. Nenhuma imagem
+informativa ficou sem alternativa textual, e nenhuma decorativa expõe texto
+redundante.
+
+### 15.7 Contraste e estados não dependentes só de cor
+
+Revisados os estados visuais que mudam por categoria/seleção/erro:
+esgotado/indisponível sempre tem texto explícito ("Esgotado",
+"Só N disponível(is) agora") além da cor destrutiva (`edition-picker.tsx`,
+`quantity-stepper.tsx`, `cart-item-row.tsx`, `nfts.$nftId.tsx`); o chip de
+categoria selecionado muda cor de fundo **e** ganha um ícone de check
+(`catalog-toolbar.tsx`); a edição selecionada tem o rádio nativo preenchido
+(indicador não dependente de cor) além da borda colorida; a miniatura ativa
+da galeria tem `aria-current` (programático) e uma borda VISÍVEL vs.
+transparente nas demais (presença/ausência de borda, não só mudança de tom,
+o que permanece perceptível para quem não distingue a cor usada). Nenhum
+estado novo foi introduzido nesta fase que dependesse só de cor.
+
+### 15.8 Feedback acessível para mutations e tempo real
+
+Auditados especificamente carrinho, checkout e os banners de preço/
+disponibilidade da Fase 6 (favoritos/perfil/carteiras já confirmados em
+fases anteriores — ver §10.3, §14): **nenhum achado**, confirmado por
+leitura de código e pela execução que já valida o comportamento (§15.1):
+
+- `cart.tsx`: o banner de "preço ou disponibilidade mudou" é
+  `role="status" aria-live="polite"`; há também uma região `sr-only`
+  dedicada para "Atualizando carrinho…" durante refetch.
+- `cart-item-row.tsx`: excesso de quantidade acima do disponível é
+  `role="status"`; erro de mutation (estoque/remoção) é `role="alert"`.
+- `coupon-form.tsx`: erro de aplicar/remover cupom é `role="alert"`/
+  `role="status" aria-live="polite"`.
+- `checkout.tsx`: todo `<Alert>` (cotação mudou, compra bloqueada, pagamento
+  não enviado, tentativa aguardando resposta) usa `role="alert"` (herdado de
+  `alert.tsx`, implícito `aria-live="assertive"`); o estado de
+  conexão/desconexão da carteira é `role="status" aria-live="polite"`.
+- `orders.$orderId.tsx`: o status do pedido (pendente/confirmado/recusado,
+  inclusive quando atualizado por `order.updated` via Socket.IO — Fase 6) é
+  `role="status" aria-live="polite"`.
+- Todos os skeletons de carregamento (`catalog-grid-skeleton.tsx`,
+  `nft-detail-skeleton.tsx`, `cart-summary-skeleton.tsx`) já embrulham o
+  placeholder em `aria-busy="true" aria-live="polite" aria-label="Carregando
+  ..."` (Task 1.2) — cobre também o requisito de anunciar carregamento
+  inicial, não só mutations.
+
+### 15.9 Overflow horizontal e zoom
+
+**Nenhum achado no critério normativo**: `scrollWidth === clientWidth` (sem
+overflow) confirmado nas 9 rotas em 320/390/768/1440px, incluindo carrinho
+vazio (visitante e usuário autenticado), carrinho com itens, checkout e
+confirmação de pedido (fluxo de compra completo até `confirmed`). 320px
+equivale, pela técnica padrão de teste de WCAG 1.4.10 Reflow, a 400% de
+zoom a partir de uma referência de 1280px — nenhuma tela perde conteúdo ou
+aciona rolagem horizontal nessa condição. Confirmado também com zoom real
+do navegador (150/200/300%, que reduz o viewport efetivo de layout) nas 9
+rotas: sem overflow.
+
+**Correção pós-gate (`val-a11y`):** esta seção afirmava ter testado
+adicionalmente com a propriedade CSS `zoom` (não-padrão) em 1.5×/2×/3×
+sobre 1440px "sem overflow" — essa alegação não se sustentou na
+reprodução independente e estava incompleta (só cobria Início/carrinho).
+`element.style.zoom` no Chromium não encolhe o viewport de layout usado
+pelas media queries (o header nunca comuta para o layout mobile), então
+não é um proxy fiel do zoom real do navegador; usando essa técnica
+literalmente, há overflow real nas 9 rotas (header a partir de 3×,
+Carrinho já a partir de 2×). Isso não é uma violação de WCAG 1.4.10 para
+usuários reais — o critério normativo (reflow a 320px) e o zoom real do
+navegador, ambos testados acima, passam limpo — é só uma imprecisão desta
+seção, removida.
+
+### 15.10 Desvio de asset/Figma
+
+Sem alteração em relação ao que já está registrado nas Fases 1/2 (§6.5,
+§8.3): o link do Figma real continua inacessível neste ambiente de
+execução, os tokens de cor/tipografia permanecem o placeholder neutro do
+preset `shadcn/ui` "radix-nova" (agora com `--ring` mais escuro por
+exigência de contraste — §15.2 — não por preferência estética), e as
+imagens de fixtures continuam SVG inline em data URI. Nenhum asset novo foi
+substituído nesta fase; o único ajuste "visual" foi o tom do token de foco,
+já justificado e medido acima. **Nota adicional**: o projeto nunca aplica a
+classe `.dark` em nenhum componente (sem seletor de tema) — os tokens de
+`:root` (modo claro) são os efetivamente usados em produção; o bloco
+`.dark` existe só como parte do preset herdado e não afeta a experiência
+real, mas foi auditado/calculado mesmo assim (§15.2) para não deixar uma
+lacuna não verificada.
+
+### 15.11 Validação final desta entrega
+
+`npm run dev` (com e sem `VITE_ENABLE_MOCKS=true`), `npm run typecheck`,
+`npm run build` (com e sem a mesma flag) e `npm run lint` executados do zero
+após todas as correções — os quatro passam limpos, sem nenhum novo aviso.
+Diff desta fase ficou restrito a 8 arquivos: `src/index.css`,
+`src/components/ui/button.tsx`, `src/components/ui/input.tsx`,
+`src/features/catalog/components/{catalog-toolbar,nft-card,nft-gallery,
+quantity-stepper}.tsx` e `src/routes/checkout.tsx` — nenhum contrato REST/
+evento, hook de estado ou lógica de negócio foi tocado.
