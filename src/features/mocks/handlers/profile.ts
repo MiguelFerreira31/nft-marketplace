@@ -8,6 +8,12 @@ import type {
   UpdateProfileRequest,
   UpdateProfileResponse,
 } from '@/shared/types'
+import {
+  AVATAR_MIME_TYPES,
+  MAX_AVATAR_FILE_SIZE_BYTES,
+  PROFILE_BIO_MAX_LENGTH,
+  PROFILE_NAME_MAX_LENGTH,
+} from '@/shared/types'
 import { getDb, persistDb } from '../db/store'
 import type { MockUserRecord } from '../db/types'
 import { requireUser } from '../utils/auth'
@@ -16,6 +22,18 @@ import { hashPassword, verifyPassword } from '../utils/password'
 import { withScenario } from '../utils/with-scenario'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const AVATAR_DATA_URL_PATTERN = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/
+
+function isValidAvatarDataUrl(value: string): boolean {
+  const match = AVATAR_DATA_URL_PATTERN.exec(value)
+  if (!match || !AVATAR_MIME_TYPES.includes(match[1] as (typeof AVATAR_MIME_TYPES)[number])) return false
+
+  const base64 = match[2]
+  if (base64.length % 4 !== 0) return false
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  const sizeBytes = Math.floor((base64.length * 3) / 4) - padding
+  return sizeBytes > 0 && sizeBytes <= MAX_AVATAR_FILE_SIZE_BYTES
+}
 
 function toProfile(user: MockUserRecord): ProfileResponse {
   return {
@@ -47,18 +65,22 @@ export const profileHandlers = [
       const body = (await request.json()) as UpdateProfileRequest
 
       const fieldErrors: Record<string, string[]> = {}
-      if (body.name !== undefined && body.name.trim().length < 2) {
-        fieldErrors.name = ['Informe um nome com ao menos 2 caracteres.']
+      const email = body.email?.trim()
+      if (body.name !== undefined && (body.name.trim().length < 2 || body.name.trim().length > PROFILE_NAME_MAX_LENGTH)) {
+        fieldErrors.name = [`Informe um nome entre 2 e ${PROFILE_NAME_MAX_LENGTH} caracteres.`]
       }
-      if (body.email !== undefined && !EMAIL_PATTERN.test(body.email)) {
+      if (email !== undefined && !EMAIL_PATTERN.test(email)) {
         fieldErrors.email = ['Informe um e-mail válido.']
+      }
+      if (body.bio !== undefined && (body.bio?.length ?? 0) > PROFILE_BIO_MAX_LENGTH) {
+        fieldErrors.bio = [`A biografia deve ter no máximo ${PROFILE_BIO_MAX_LENGTH} caracteres.`]
       }
       if (Object.keys(fieldErrors).length > 0) throw validationError(fieldErrors)
 
-      if (body.email && body.email.toLowerCase() !== user.email) {
-        const taken = db.users.some((candidate) => candidate.id !== user.id && candidate.email.toLowerCase() === body.email!.toLowerCase())
+      if (email && email.toLowerCase() !== user.email) {
+        const taken = db.users.some((candidate) => candidate.id !== user.id && candidate.email.toLowerCase() === email.toLowerCase())
         if (taken) throw conflictError('DUPLICATE_EMAIL', 'Este e-mail já está em uso por outra conta.')
-        user.email = body.email.toLowerCase()
+        user.email = email.toLowerCase()
       }
       if (body.name !== undefined) user.name = body.name.trim()
       if (body.bio !== undefined) user.bio = body.bio
@@ -78,8 +100,10 @@ export const profileHandlers = [
       const user = requireUser(db)
       const body = (await request.json()) as UpdateAvatarRequest
 
-      if (!body.avatarDataUrl || !body.avatarDataUrl.startsWith('data:image/')) {
-        throw validationError({ avatarDataUrl: ['Envie uma imagem válida.'] })
+      if (!body.avatarDataUrl || !isValidAvatarDataUrl(body.avatarDataUrl)) {
+        throw validationError({
+          avatarDataUrl: [`Envie PNG, JPEG, WebP ou GIF com até ${MAX_AVATAR_FILE_SIZE_BYTES / 1_048_576} MB.`],
+        })
       }
 
       user.avatarUrl = body.avatarDataUrl

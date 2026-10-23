@@ -46,3 +46,9 @@ export function mapAuthError(error: unknown): AuthFormErrors {
 
   return { fieldErrors: {}, formError: body.message || 'Ocorreu um erro inesperado. Tente novamente.' }
 }
+
+export function mapAccountError(error: unknown): AuthFormErrors {
+  const mapped = mapAuthError(error)
+  const body = getApiErrorBody(error)
+  return body?.code === 'TRANSIENT_ERROR' ? { ...mapped, formError: body.message } : mapped
+}

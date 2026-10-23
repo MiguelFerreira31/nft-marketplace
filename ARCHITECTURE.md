@@ -1480,3 +1480,65 @@ pedidos pendentes com chaves distintas, rejeição de carrinho alheio e validaç
 da rede da carteira. A suíte passou em Chromium desktop e mobile (9 testes por
 perfil), incluindo o timeout de 15 s do MSW recuperado com a mesma chave e
 payload.
+
+## 14. Perfil e carteiras (Fase 8 — Tasks 8.1/8.2)
+
+`/account/profile` usa `useProfileQuery` e as mutations dos contratos
+existentes (`PATCH /profile`, `PATCH /profile/avatar` e
+`POST /profile/password`). Nome, e-mail e biografia têm validação no cliente
+e no handler; erros de campo e falhas da API são exibidos junto ao campo ou
+como alerta. O avatar é validado como PNG, JPEG, WebP ou GIF até 1 MiB,
+convertido para data URL via `FileReader` e persistido pelo mock. Após uma
+atualização, o cache do perfil e os campos visíveis na sessão (nome, e-mail
+e avatar do cabeçalho) são reconciliados, desde que a sessão ainda pertença
+ao mesmo usuário da resposta.
+
+A alteração de senha exige senha atual e nova senha com ao menos oito
+caracteres; a API confirma a senha atual e persiste somente seu hash. Os
+campos são apagados após sucesso, sem senha em sessão, cache ou armazenamento
+local.
+
+`/account/wallets` apresenta um formulário para cada slot `primary` e
+`secondary`; ambos usam `PUT /wallets/:kind`, que cria ou substitui o slot
+correspondente. Endereços devem ser `0x` mais 40 caracteres hexadecimais,
+redes limitam-se aos identificadores simulados `ethereum-mainnet-sim` e
+`polygon-sim`, e rótulos têm no máximo 40 caracteres. Os mesmos contratos e
+validações são aplicados no MSW e na UI; as mutations invalidam a query de
+carteiras isolada por usuário, que também alimenta o checkout. Fixtures
+legadas foram ajustadas para endereços EVM completos. Os formulários se
+empilham em viewports estreitos.
+
+`tests/e2e/account.spec.ts` cobre validação de perfil, avatar, senha e
+carteiras; falhas HTTP de atualização de perfil/avatar/senha/upsert; e
+persistência de nome/e-mail/biografia/avatar/senha e dos dois slots de
+carteira após refresh. Também confirma que o checkout lê a carteira e a rede
+editadas. Executada em Chromium desktop e mobile.
+
+### 14.1 Correções pós-gate
+
+Esta fase foi implementada por um processo externo não supervisionado
+(Copilot CLI, sem handoff) enquanto a sessão principal estava sem cota de
+uso. Antes de aceitar o trabalho, os três validadores do gate (`val-a11y`,
+`val-testing-strategy`, `val-manual-qa`) auditaram com ceticismo extra —
+nenhum achado crítico/alto, mas duas correções obrigatórias foram aplicadas
+antes do commit:
+
+1. **Estados de erro de carregamento** em `/account/profile` e
+   `/account/wallets` usavam um `<div role="alert">` artesanal (sem ícone,
+   sem o padrão visual do resto do app) em vez do componente compartilhado
+   `CatalogErrorState` já usado em `/`, `/cart` e `/orders/$orderId` —
+   corrigido para reaproveitá-lo, consistente com a diretriz do readme §1
+   de que estados não desenhados sigam o mesmo padrão visual.
+2. **Erro de mutation do formulário de carteira** usava outro `<div
+   role="alert">` improvisado, inconsistente com o `<Alert>` do shadcn já
+   usado nos outros formulários da mesma página (perfil/senha) e em
+   `login.tsx`/`register.tsx`/`checkout.tsx` — corrigido para o mesmo
+   padrão.
+
+Além disso, o diff original tocava 8 arquivos fora do escopo da Fase 8
+(`button.tsx`, `input.tsx`, `index.css` e 5 arquivos de catálogo/checkout),
+aplicando um ajuste global de contraste do anel de foco (remover opacidade
+dos tokens `--input`/`--ring`) sem passar pelo gate das fases 1/4/7 já
+fechadas. Esse ajuste foi **revertido** (não descartado como ideia — ver
+nota na Fase 9 do `PLAN.md`) para manter a disciplina de que nenhuma fase
+mexe em código de uma fase anterior já validada sem o gate daquela fase.

@@ -1,5 +1,10 @@
 import type { Brand, IsoDateTime, NetworkId } from './common'
 
+export const WALLET_NETWORKS = [
+  { id: 'ethereum-mainnet-sim', label: 'Ethereum (simulada)' },
+  { id: 'polygon-sim', label: 'Polygon (simulada)' },
+] as const
+
 export type WalletId = Brand<string, 'WalletId'>
 
 export type WalletKind = 'primary' | 'secondary'

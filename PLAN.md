@@ -316,14 +316,14 @@ que o recibo não muda.
 ### Task 8.1 — Perfil
 Agente: `agent-account` · Validador: `val-testing-strategy`
 
-- [ ] Edição de dados, avatar, alteração de senha, erros da API tratados.
-- [ ] Alterações confirmadas persistem após refresh.
+- [x] Edição de dados, avatar, alteração de senha, erros da API tratados.
+- [x] Alterações confirmadas persistem após refresh.
 
 ### Task 8.2 — Carteiras
 Agente: `agent-account` · Validador: `val-testing-strategy`
 
-- [ ] Cadastro/edição de carteira principal e secundária, com validação.
-- [ ] Funciona em mobile mesmo sem frame específico no Figma, seguindo o
+- [x] Cadastro/edição de carteira principal e secundária, com validação.
+- [x] Funciona em mobile mesmo sem frame específico no Figma, seguindo o
       mesmo padrão visual das demais telas.
 
 **Gate:** `val-a11y` + `val-manual-qa` cobrem formulários (labels, erros
@@ -334,6 +334,15 @@ associados, foco) e o layout mobile sem frame dedicado.
 ## Fase 9 — Acessibilidade e responsividade (transversal)
 
 Agente: `agent-quality` · Validador: `val-a11y`
+
+> **Nota herdada do gate da Fase 8**: um ajuste de contraste do anel de foco
+> (remover a opacidade `/50`/`/30`/`/15%` dos tokens `--input`/`--ring` e de
+> `outline-ring`/`focus-visible:ring-ring` em `button.tsx`, `input.tsx`,
+> `index.css` e nos componentes do catálogo/checkout) foi tentado fora de
+> escopo por um processo não supervisionado durante a Fase 8 e **revertido**
+> por não ter passado por gate de validação daquelas fases já fechadas. A
+> ideia em si é válida (melhora contraste do foco) — avaliar e implementar
+> aqui, com o gate normal desta fase, se fizer sentido.
 
 - [ ] Navegação por teclado e foco visível em todas as telas.
 - [ ] Controle de foco em diálogos/drawers (trap + retorno ao gatilho).

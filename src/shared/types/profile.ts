@@ -1,6 +1,11 @@
 import type { IsoDateTime } from './common'
 import type { UserId } from './session'
 
+export const PROFILE_NAME_MAX_LENGTH = 80
+export const PROFILE_BIO_MAX_LENGTH = 280
+export const MAX_AVATAR_FILE_SIZE_BYTES = 1_048_576
+export const AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
+
 export interface Profile {
   id: UserId
   name: string
