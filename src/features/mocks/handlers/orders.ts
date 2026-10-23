@@ -38,23 +38,40 @@ export const orderHandlers = [
 
       const existing = db.idempotency[idempotencyKey]
       if (existing) {
+        const existingRecord = db.orders[existing.orderId]
+        if (!existingRecord || existingRecord.ownerUserId !== user.id) {
+          throw forbiddenError('Este pedido pertence a outro usuário.')
+        }
         const samePayload = JSON.stringify(existing.payload) === JSON.stringify(body)
         if (!samePayload) {
           throw conflictError('IDEMPOTENCY_KEY_MISMATCH', 'Esta chave de idempotência já foi usada com um pedido diferente.')
         }
-        const record = db.orders[existing.orderId]
-        const response: CreateOrderResponse = record.order
+        const response: CreateOrderResponse = existingRecord.order
         return HttpResponse.json(response)
       }
 
       const cart = findCartById(db, body.cartId)
       if (!cart) throw notFoundError('cart_item', 'Carrinho não encontrado.')
+      if (cart.id !== user.cart.id) throw forbiddenError('Este carrinho pertence a outro usuário.')
       if (cart.items.length === 0) {
         throw validationError({ cartId: ['O carrinho está vazio.'] })
       }
 
       const wallet = user.wallets.find((candidate) => candidate.id === body.walletId)
       if (!wallet) throw notFoundError('wallet', 'Carteira não encontrada.')
+      if (body.network !== wallet.network) {
+        throw validationError({ network: ['A rede não corresponde à carteira selecionada.'] })
+      }
+
+      const pendingRecord = Object.values(db.orders).find(
+        (record) => record.cartId === cart.id && record.ownerUserId === user.id && record.order.status === 'pending',
+      )
+      if (pendingRecord) {
+        db.idempotency[idempotencyKey] = { payload: body, orderId: pendingRecord.order.id, pendingTimeout: false }
+        persistDb(db)
+        const response: CreateOrderResponse = pendingRecord.order
+        return HttpResponse.json(response)
+      }
 
       const couponPercent = cart.couponCode ? (db.coupons.find((coupon) => coupon.code === cart.couponCode)?.discountPercent ?? null) : null
       const quote = computeQuote(db, cart, couponPercent)

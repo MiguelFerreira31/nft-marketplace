@@ -267,14 +267,10 @@ literalmente e confirma bloqueio de confirmação com cotação velha.
 ### Task 7.1 — Fluxo de pagamento
 Agente: `agent-checkout` · Validador: `val-code-review`
 
-> **Nota herdada do gate da Fase 3** (`val-code-review`, achado MÉDIO): o
-> guard `requireAuth` admite sessão em cache sem revalidar
-> (`revalidateIfStale` ausente em `sessionQueryOptions()`), mitigado hoje só
-> porque `/checkout` e `/orders/$orderId` não disparam nenhum fetch
-> autenticado (são stubs). Ao implementar esta task, replique o padrão de
-> `/account/profile` (um `useQuery` real logo no mount) ou passe
-> `revalidateIfStale: true` no guard — sem isso, sessão expirada pode admitir
-> acesso indevido ao checkout real. Ver `ARCHITECTURE.md` §9.3(2)/§9.4.
+> **Nota herdada do gate da Fase 3 resolvida nesta task:** `requireAuth`
+> aguarda `fetchQuery(sessionQueryOptions())`; a sessão stale é revalidada
+> antes de liberar a rota. O E2E cobre a expiração durante navegação SPA.
+> Ver `ARCHITECTURE.md` §13.1.
 >
 > **Integração com a Fase 6:** o checkout já exige revisão explícita da
 > cotação corrente e invalida essa revisão quando preço/disponibilidade ou
@@ -282,13 +278,13 @@ Agente: `agent-checkout` · Validador: `val-code-review`
 > revisada, revalidar com a API antes do POST e voltar a exigir revisão se
 > houver conflito — nunca confirmar com uma cotação diferente da aceita.
 
-- [ ] Dados do colecionador, seleção de carteira/rede, simulação de conexão,
+- [x] Dados do colecionador, seleção de carteira/rede, simulação de conexão,
       recusa e desconexão.
-- [ ] Revalidação de preço, disponibilidade, cupom e taxas antes de confirmar;
+- [x] Revalidação de preço, disponibilidade, cupom e taxas antes de confirmar;
       mudança exige nova confirmação.
-- [ ] Prevenção de pedido duplicado (clique repetido / reenvio após timeout)
+- [x] Prevenção de pedido duplicado (clique repetido / reenvio após timeout)
       via chave de idempotência.
-- [ ] Estados pendente/confirmado/recusado recuperáveis após refresh/reconexão;
+- [x] Estados pendente/confirmado/recusado recuperáveis após refresh/reconexão;
       confirmado/recusado são terminais.
 
 **Gate:** `val-code-review` confirma uso real da chave de idempotência (mesma
@@ -299,13 +295,19 @@ simulação" depende disso.
 ### Task 7.2 — Confirmação e recibo
 Agente: `agent-checkout` · Validador: `val-manual-qa`
 
-- [ ] Confirmação exibida só para pedido efetivamente confirmado na simulação.
-- [ ] Falhas preservam itens; confirmação remove do carrinho apenas o que foi
+- [x] Confirmação exibida só para pedido efetivamente confirmado na simulação.
+- [x] Falhas preservam itens; confirmação remove do carrinho apenas o que foi
       comprado.
-- [ ] Recibo reproduz snapshot do pedido, imune a mudanças futuras do catálogo.
+- [x] Recibo reproduz snapshot do pedido, imune a mudanças futuras do catálogo.
 
 **Gate:** `val-manual-qa` altera preço do NFT após confirmar pedido e verifica
 que o recibo não muda.
+
+> **Nota não bloqueante do gate manual:** os painéis TanStack de devtools
+> podem sobrepor os totais/ações do checkout em 390/768 px durante `vite dev`.
+> Ambos são condicionados a `import.meta.env.DEV` e não aparecem no build de
+> produção; reposicionar se o roteiro manual continuar sendo executado no
+> ambiente de desenvolvimento.
 
 ---
 

@@ -15,13 +15,11 @@ import { sessionQueryOptions } from '@/features/account/hooks/useSessionQuery'
  * })
  * ```
  *
- * `context.queryClient.ensureQueryData(sessionQueryOptions())` reaproveita a
- * MESMA `queryKey`/`queryFn`/`staleTime` que `useSessionQuery` usa em
- * componentes — se o cache já tem uma sessão fresca (ex.: já resolvida no
- * boot da rota raiz), não dispara outra requisição; caso contrário, aguarda
- * o `GET /session` resolver antes de decidir (cobre tanto acesso direto por
- * URL colada quanto refresh — a sessão simulada sobrevive porque o "banco"
- * do MSW é persistido em `localStorage`, não depende de nada no cliente).
+ * `fetchQuery(sessionQueryOptions())` reaproveita a MESMA `queryKey`/
+ * `queryFn`/`staleTime` que `useSessionQuery`; quando a sessão está stale,
+ * aguarda o `GET /session` resolver antes de admitir acesso (não usa
+ * `ensureQueryData` com revalidação em background, que poderia liberar a
+ * rota com a sessão antiga).
  *
  * Preserva o destino original em `search.redirect` (`location.href`, que já
  * inclui path + query string) para a tela de login retomar o fluxo após
@@ -37,7 +35,7 @@ export async function requireAuth({
   context: { queryClient: QueryClient }
   location: { href: string }
 }): Promise<void> {
-  const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
+  const session = await context.queryClient.fetchQuery(sessionQueryOptions())
   if (!session) {
     throw redirect({
       to: '/login',

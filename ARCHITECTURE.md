@@ -1415,3 +1415,68 @@ Assim, o ciclo setup/cleanup extra do `StrictMode` não inicia uma conexão que
 será imediatamente descartada; a limpeza continua removendo listeners e
 desconectando o socket, enquanto logout/troca de sessão permanece sob
 responsabilidade de `disconnectSessionSocket()`.
+
+## 13. Pagamento e confirmação (Fase 7 — Tasks 7.1/7.2)
+
+### 13.1 Checkout autenticado e revisão da cotação
+
+`/checkout` faz consultas autenticadas de perfil e carteiras no mount, além
+de recuperar sessão e carrinho. O guard usa `fetchQuery(sessionQueryOptions())`
+e aguarda a revalidação quando a entrada está stale; não há caminho de checkout
+que dependa apenas de uma sessão antiga guardada no cache.
+
+A cotação em `useQuoteQuery` é revalidada pela API imediatamente antes do
+`POST /orders`. A versão e os dados financeiros/de disponibilidade da
+resposta são comparados com a cotação explicitamente aceita; o evento
+`nft.updated` mais recente que afeta o carrinho também faz parte do token de
+revisão. Mudança de itens/preços, estoque, cupom, desconto, taxa, total,
+carteira ou rede invalida a aceitação. Um conflito `STOCK_UNAVAILABLE`
+recarrega carrinho e cotação, exige nova aceitação e inicia uma tentativa
+com nova chave. O POST usa exclusivamente `quoteVersion` aceito; o cliente
+não recalcula valores ETH.
+
+Carteiras e redes são lidas da API autenticada. A rede disponível é a
+associada à carteira selecionada, e o handler rejeita combinações divergentes.
+Conectar, recusar conexão e desconectar são controles locais explicitamente
+identificados como simulação; não há integração com extensão, assinatura ou
+blockchain. A taxa de rede é recebida da cotação REST (o mock atual usa
+`0.0021 ETH` fixa e independente da rede selecionada).
+
+### 13.2 Tentativa, timeout e recuperação
+
+`useCreateOrderMutation` recebe a chave gerada por
+`createIdempotencyKey()` e mantém `retry: false`. O checkout guarda payload e
+chave no armazenamento local por usuário. Cliques repetidos, timeout e
+refresh durante uma resposta incerta repetem a mesma chave e payload; a
+resposta idempotente retorna o mesmo `OrderId`. Alterações de carrinho,
+cotação, carteira ou rede não podem reaproveitar uma tentativa antiga.
+Timeout/falha sem resposta é apresentado como resultado incerto, não como
+sucesso, e oferece retry explícito. A UI só navega para recibo após receber
+um `Order` da API.
+
+O MSW cria o pedido em `pending`; a confirmação/recusa assíncrona permanece
+responsabilidade de `scheduleOrderResolution`. Pedidos pendentes são
+recuperados por consulta REST ao carregar o recibo, polling enquanto
+pendentes e invalidação por `order.updated`. `confirmed` e `refused` são
+terminais. Uma recusa de conexão da carteira não envia pedido; uma recusa de
+pagamento é resposta do pedido simulado.
+
+### 13.3 Recibo imutável e cobertura E2E
+
+`/orders/$orderId` exibe somente os dados do `Order` recebido da API. Itens,
+quantidades, preços, subtotal, desconto/cupom, taxa, total, carteira e rede
+vêm do snapshot criado pelo handler; a referência de transação aparece
+somente em `confirmed`. A confirmação no mock é o único caminho que debita
+estoque e remove do carrinho as quantidades compradas. Timeout, recusa e
+falha preservam os itens.
+
+`tests/e2e/checkout.spec.ts` cobre envio confirmado, timeout/idempotência e
+conflito por chave com payload divergente, recusa preservando carrinho,
+pedido pendente após refresh com resolução por Socket.IO, estabilidade do
+snapshot após mudança do catálogo, falha HTTP preservando o carrinho,
+bloqueio/revisão explícita após cotação alterada durante a revalidação final,
+expiração de sessão em cache antes de entrar no checkout, deduplicação de
+pedidos pendentes com chaves distintas, rejeição de carrinho alheio e validação
+da rede da carteira. A suíte passou em Chromium desktop e mobile (9 testes por
+perfil), incluindo o timeout de 15 s do MSW recuperado com a mesma chave e
+payload.

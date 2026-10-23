@@ -12,17 +12,17 @@ export function findCartById(db: MockDb, cartId: string): Cart | null {
   return user?.cart ?? null
 }
 
-function fingerprintOf(cart: Cart): string {
+function fingerprintOf(cart: Cart, networkFeeEth: string, couponDiscountPercent: number | null): string {
   const itemsFingerprint = cart.items
     .map((item) => `${item.editionId}:${item.quantity}:${item.unitPriceEth}:${item.availableQuantity}`)
     .sort()
     .join('|')
-  return `${itemsFingerprint}#${cart.couponCode ?? ''}`
+  return `${itemsFingerprint}#${cart.couponCode ?? ''}#${couponDiscountPercent ?? ''}#${networkFeeEth}`
 }
 
 /** Lê (ou inicia) a `quoteVersion` do carrinho — incrementa só quando o fingerprint muda (ver `db/types.ts`). */
-function nextQuoteVersion(db: MockDb, cart: Cart): number {
-  const fingerprint = fingerprintOf(cart)
+function nextQuoteVersion(db: MockDb, cart: Cart, networkFeeEth: string, couponDiscountPercent: number | null): number {
+  const fingerprint = fingerprintOf(cart, networkFeeEth, couponDiscountPercent)
   const previous = db.quoteState[cart.id]
   const version = previous && previous.fingerprint === fingerprint ? previous.version : (previous?.version ?? 0) + 1
   db.quoteState[cart.id] = { fingerprint, version }
@@ -52,7 +52,7 @@ export function computeQuote(db: MockDb, cart: Cart, couponDiscountPercent: numb
     discountEth,
     networkFeeEth,
     totalEth,
-    quoteVersion: nextQuoteVersion(db, cart),
+    quoteVersion: nextQuoteVersion(db, cart, networkFeeEth, couponDiscountPercent),
     expiresAt: new Date(Date.now() + QUOTE_TTL_MS).toISOString(),
   }
 }
