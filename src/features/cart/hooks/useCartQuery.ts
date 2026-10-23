@@ -10,8 +10,8 @@ import { cartApi } from '../api/cart.api'
  * mesclagem em si é responsabilidade do `agent-cart`/`agent-auth` (Fases 3 e
  * 5); aqui só garantimos que a chave de cache nunca mistura os dois.
  *
- * Revalidar ao voltar o foco mantém preço e disponibilidade atuais até a
- * integração Socket.IO da Fase 6.
+ * `nft.updated` invalida a query enquanto o app está conectado; revalidar ao
+ * voltar o foco também cobre mudanças ocorridas durante uma desconexão.
  */
 export function useCartQuery(userId: UserId | 'guest') {
   return useQuery({

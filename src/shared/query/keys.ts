@@ -38,6 +38,10 @@ export const queryKeys = {
     detail: (orderId: OrderId) => ['orders', orderId] as const,
   },
 
+  realtime: {
+    nftEvents: () => ['realtime', 'nft-events'] as const,
+  },
+
   profile: {
     detail: (userId: UserId) => ['profile', userId] as const,
   },

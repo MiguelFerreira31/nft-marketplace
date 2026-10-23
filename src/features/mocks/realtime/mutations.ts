@@ -54,6 +54,7 @@ export function applyNftUpdate(db: MockDb, nftId: NftId, patch: NftUpdatePatch):
       editionId: patch.editionId,
       priceEth: patch.priceEth,
       availableQuantity: patch.availableQuantity,
+      priceFromEth: nft.priceFromEth,
     },
   }
   emitNftUpdated(envelope)
@@ -63,6 +64,7 @@ export function applyNftUpdate(db: MockDb, nftId: NftId, patch: NftUpdatePatch):
 export function applyOrderStatusChange(db: MockDb, order: Order): OrderUpdatedEvent {
   const nextVersion = (db.orderEventVersions[order.id] ?? 0) + 1
   db.orderEventVersions[order.id] = nextVersion
+  order.version = nextVersion
   persistDb(db)
 
   const envelope: OrderUpdatedEvent = {
@@ -91,9 +93,9 @@ export function applyOrderStatusChange(db: MockDb, order: Order): OrderUpdatedEv
  * comprados"). Numa recusa, carrinho e estoque permanecem intactos (seção 3:
  * "Preservar os itens em falhas").
  */
-function settleOrder(db: MockDb, orderId: OrderId, outcome: 'confirmed' | 'refused'): void {
+function settleOrder(db: MockDb, orderId: OrderId, outcome: 'confirmed' | 'refused'): OrderUpdatedEvent | null {
   const record = db.orders[orderId]
-  if (!record || record.order.status !== 'pending') return
+  if (!record || record.order.status !== 'pending') return null
 
   record.order.status = outcome
   record.order.transactionRef = outcome === 'confirmed' ? createMockId('tx') : null
@@ -123,7 +125,7 @@ function settleOrder(db: MockDb, orderId: OrderId, outcome: 'confirmed' | 'refus
   }
 
   persistDb(db)
-  applyOrderStatusChange(db, record.order)
+  return applyOrderStatusChange(db, record.order)
 }
 
 /**
@@ -161,6 +163,10 @@ export function scheduleOrderResolution(db: MockDb, orderId: OrderId): void {
  * pedido deixado deliberadamente pendente (`paymentOutcome: 'pending-forever'`)
  * e simular a reconexão/confirmação tardia.
  */
-export function forceOrderStatus(db: MockDb, orderId: OrderId, status: 'confirmed' | 'refused'): void {
-  settleOrder(db, orderId, status)
+export function forceOrderStatus(
+  db: MockDb,
+  orderId: OrderId,
+  status: 'confirmed' | 'refused',
+): OrderUpdatedEvent | null {
+  return settleOrder(db, orderId, status)
 }

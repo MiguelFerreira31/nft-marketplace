@@ -11,6 +11,7 @@ import { CartTotals } from '@/features/cart/components/cart-totals'
 import { CouponForm } from '@/features/cart/components/coupon-form'
 import { useCartQuery } from '@/features/cart/hooks/useCartQuery'
 import { useQuoteQuery } from '@/features/cart/hooks/useQuoteQuery'
+import { useRealtimeNftEvents } from '@/features/realtime/hooks/useRealtimeNftEvents'
 
 /**
  * Carrinho de NFTs (readme §3): edição de quantidades, remoção, cupom e
@@ -28,11 +29,17 @@ function CartPage() {
   const userId = sessionQuery.data?.user.id ?? 'guest'
   const cartQuery = useCartQuery(userId)
   const cart = cartQuery.data
+  const realtimeUpdates = useRealtimeNftEvents()
   const hasItems = Boolean(cart && cart.items.length > 0)
   const quoteQuery = useQuoteQuery(hasItems ? cart?.id : undefined)
   const isInitialLoading = sessionQuery.isPending || cartQuery.isPending
   const isRefreshing = cartQuery.isFetching || quoteQuery.isFetching
   const hasUnavailableItem = cart?.items.some((item) => item.quantity > item.availableQuantity) ?? false
+  const hasRealtimeCartUpdate =
+    Boolean(cart) &&
+    (realtimeUpdates.data ?? []).some(
+      ({ event, cartId }) => cartId === cart?.id && cart.items.some((item) => item.nftId === event.resourceId),
+    )
 
   function handleRefresh() {
     void (async () => {
@@ -56,6 +63,11 @@ function CartPage() {
       <p role="status" aria-live="polite" className="sr-only">
         {isRefreshing ? 'Atualizando carrinho…' : ''}
       </p>
+      {hasRealtimeCartUpdate ? (
+        <p role="status" aria-live="polite" className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+          O preço ou a disponibilidade de um NFT do carrinho mudou. O resumo foi atualizado com a cotação mais recente.
+        </p>
+      ) : null}
 
       {isInitialLoading ? (
         <div className="rounded-xl border border-border p-4">

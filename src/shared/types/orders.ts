@@ -28,6 +28,8 @@ export interface OrderItem {
 export interface Order {
   id: OrderId
   status: OrderStatus
+  /** Versão monotônica do recurso, compartilhada com `order.updated`. */
+  version: number
   items: OrderItem[]
   subtotalEth: EthAmount
   discountEth: EthAmount

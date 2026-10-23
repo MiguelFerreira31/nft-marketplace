@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { OrderId } from '@/shared/types'
+import { useOrderQuery } from '@/features/checkout/hooks/useOrderQuery'
+import { CatalogErrorState } from '@/features/catalog/components/catalog-error-state'
 import { requireAuth } from '@/shared/session/requireAuth'
 
 /**
@@ -16,15 +18,39 @@ export const Route = createFileRoute('/orders/$orderId')({
 
 function OrderConfirmationPage() {
   const { orderId } = Route.useParams() as { orderId: OrderId }
+  const orderQuery = useOrderQuery(orderId)
+
+  if (orderQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4" aria-busy="true">
+        <h1 className="text-2xl font-semibold">Pedido</h1>
+        <p role="status">Carregando status do pedido…</p>
+      </div>
+    )
+  }
+
+  if (orderQuery.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold">Pedido</h1>
+        <CatalogErrorState error={orderQuery.error} onRetry={() => orderQuery.refetch()} title="Não foi possível carregar o pedido" />
+      </div>
+    )
+  }
+
+  const order = orderQuery.data
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Confirmação do pedido</h1>
-      <p className="text-sm text-muted-foreground">
-        Recibo (itens, taxas, total e referência de transação) do pedido{' '}
-        <code className="rounded bg-muted px-1 py-0.5 text-xs">{orderId}</code> chega na Fase 7
-        (`agent-checkout`). Estados pendente/confirmado/recusado também são dessa fase.
+      <h1 className="text-2xl font-semibold">{order.status === 'confirmed' ? 'Pedido confirmado' : 'Pedido'}</h1>
+      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+        Status: {order.status === 'pending' ? 'Pendente' : order.status === 'confirmed' ? 'Confirmado' : 'Recusado'}.
+        {order.status === 'pending' ? ' Aguardando a atualização do pagamento.' : ''}
       </p>
+      <p className="text-sm text-muted-foreground">
+        Pedido <code className="rounded bg-muted px-1 py-0.5 text-xs">{order.id}</code> · versão {order.version}
+      </p>
+      <p className="text-sm text-muted-foreground">O recibo detalhado será exibido na Fase 7.</p>
     </div>
   )
 }

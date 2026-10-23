@@ -4,6 +4,7 @@ import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { AppShell } from '@/components/layout/app-shell'
 import { NotFoundState } from '@/components/not-found-state'
 import { useSessionExpiryRedirect } from '@/shared/session/useSessionExpiryRedirect'
+import { useRealtimeSync } from '@/features/realtime/hooks/useRealtimeSync'
 
 /**
  * Contexto do router: carrega o `QueryClient` (injetado em `main.tsx`) — ver
@@ -35,6 +36,7 @@ function RootLayout() {
   // preservando o contexto para retomada — ver
   // `src/shared/session/useSessionExpiryRedirect.ts`.
   useSessionExpiryRedirect()
+  useRealtimeSync()
 
   return (
     <AppShell>

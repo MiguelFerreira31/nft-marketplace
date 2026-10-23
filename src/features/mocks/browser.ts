@@ -2,8 +2,10 @@ import { setupWorker } from 'msw/browser'
 import { getDb, resetMockData } from './db/store'
 import { handlers } from './handlers'
 import { applyNftUpdate, forceOrderStatus } from './realtime/mutations'
+import { connectedClientCount, disconnectConnectedClients, emitNftUpdated, emitOrderUpdated } from './realtime/events'
 import type { MockScenarioConfig } from './scenario'
 import { getScenario, resetScenario, setScenario } from './scenario'
+import type { NftUpdatedEvent, OrderUpdatedEvent } from '@/shared/types'
 
 /**
  * Worker MSW para o browser (dev/demo/Playwright). Ativado por
@@ -33,6 +35,10 @@ export interface MockControlPanel {
   resetScenario: () => MockScenarioConfig
   simulateNftUpdate: (input: { nftId: string; editionId?: string; priceEth?: string; availableQuantity?: number }) => Promise<unknown>
   simulateOrderUpdate: (input: { orderId: string; status: 'confirmed' | 'refused' }) => Promise<unknown>
+  replayNftEvent: (event: NftUpdatedEvent) => void
+  replayOrderEvent: (event: OrderUpdatedEvent) => void
+  connectedSocketCount: () => number
+  disconnectSocketClients: () => void
 }
 
 declare global {
@@ -60,8 +66,19 @@ if (typeof window !== 'undefined') {
     },
     async simulateOrderUpdate(input) {
       const db = await getDb()
-      forceOrderStatus(db, input.orderId as never, input.status)
-      return db.orders[input.orderId]?.order ?? null
+      return forceOrderStatus(db, input.orderId as never, input.status)
+    },
+    replayNftEvent(event) {
+      emitNftUpdated(event)
+    },
+    replayOrderEvent(event) {
+      emitOrderUpdated(event)
+    },
+    connectedSocketCount() {
+      return connectedClientCount()
+    },
+    disconnectSocketClients() {
+      disconnectConnectedClients()
     },
   }
 }

@@ -79,7 +79,7 @@ export interface MockDb {
   coupons: CouponFixture[]
   orders: Record<string, MockOrderRecord>
   idempotency: Record<IdempotencyKey, IdempotencyRecord>
-  /** Versão monotônica por pedido, usada só no envelope dos eventos `order.updated` (não faz parte do contrato REST `Order`). */
+  /** Versão monotônica por pedido, compartilhada pelo contrato REST e envelope `order.updated`. */
   orderEventVersions: Record<string, number>
   /**
    * `quoteVersion` por carrinho (`cartId`): incrementa quando o "fingerprint"

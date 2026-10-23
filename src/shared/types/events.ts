@@ -13,7 +13,7 @@ export interface RealtimeEventEnvelope<TResource extends string, TPayload> {
   id: string
   resource: TResource
   resourceId: string
-  /** Versão monotônica do recurso — mesma semântica de `Nft.version` / implícita no `Order.updatedAt`. */
+  /** Versão monotônica do recurso, compartilhada com `Nft.version` ou `Order.version`. */
   version: number
   occurredAt: IsoDateTime
   payload: TPayload
@@ -24,6 +24,8 @@ export interface NftUpdatedPayload {
   editionId?: EditionId
   priceEth?: EthAmount
   availableQuantity?: Quantity
+  /** Preço mínimo atual informado pelo MockDb para atualizar cards sem aproximação local. */
+  priceFromEth?: EthAmount
 }
 
 export interface OrderUpdatedPayload {
@@ -46,4 +48,3 @@ export interface RealtimeServerToClientEvents {
 
 /** Nenhum evento client→server previsto até a Fase 6. */
 export type RealtimeClientToServerEvents = Record<string, never>
-

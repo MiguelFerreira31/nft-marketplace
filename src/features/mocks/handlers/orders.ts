@@ -67,6 +67,7 @@ export const orderHandlers = [
       const order: Order = {
         id: createMockId('order') as OrderId,
         status: 'pending',
+        version: 0,
         items: cart.items.map((item) => ({
           editionId: item.editionId,
           nftId: item.nftId,

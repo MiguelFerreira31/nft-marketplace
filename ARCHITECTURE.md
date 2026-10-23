@@ -1341,3 +1341,77 @@ combinada, confirmando que o merge preserva todos os itens, sinaliza o
 excesso e desabilita o botão de checkout. `npm run typecheck`, `npm run lint`
 e `npm run build` passaram. A reconciliação imediata por Socket.IO e o
 cenário completo de alteração durante checkout ficam para a Fase 6.
+
+## 12. Tempo real e reconciliação REST (Fase 6 — Tasks 6.1/6.2)
+
+### 12.1 Cliente e ciclo de vida da sessão
+
+`src/features/realtime/hooks/useRealtimeSync.ts` é montado uma vez na rota
+raiz e conecta somente após a query de sessão resolver. Ele obtém a instância
+por `getSessionSocket()`; não cria sockets próprios. A identidade observada
+combina usuário e expiração, além da referência do objeto de sessão capturado,
+para descartar callbacks atrasados após login, logout, expiração ou troca de
+sessão. `adoptSession()` continua responsável por `disconnectSessionSocket()`;
+no unmount, o hook remove apenas seus listeners e desconecta a instância.
+
+O hook consome os eventos tipados `nft.updated` e `order.updated`. IDs de
+evento e versão por recurso descartam duplicatas e versões antigas; também
+compara a versão recebida com as versões já presentes no cache REST. Um pedido
+terminal não é alterado por eventos posteriores. O contrato REST de `Order`
+agora inclui `version`, compartilhada com o envelope do evento.
+
+### 12.2 Atualização do cache e reconexão
+
+Um `nft.updated` atualiza imediatamente as entradas de lista/detalhe já
+presentes no TanStack Query, incluindo edição/preço/disponibilidade, e registra
+uma notificação somente se o carrinho ativo contém aquele NFT. Em seguida,
+invalida consultas de catálogo e carrinho ativas; após atualizar o carrinho
+pela API, revalida a cotação. Preços de linha, subtotais e totais continuam
+vindos do REST — o cliente não recalcula ETH.
+
+Um `order.updated` só afeta a consulta ativa do ID correspondente e provoca
+refetch REST em vez de fabricar um pedido a partir do evento. Isso recupera
+os campos completos do recibo e deixa a autorização de propriedade no
+handler REST. Cada evento `connect` (inclusive reconexão) invalida recursos
+ativos de NFTs e pedidos, depois carrinho e cotação, nessa ordem para que a
+cotação use o carrinho já sincronizado. Consultas inativas ficam stale e são
+atualizadas quando voltarem a ser observadas.
+
+### 12.3 Cotação durante o checkout
+
+Preço/disponibilidade atualizados no carrinho aparecem na linha e na cotação
+recalculadas pela API; indisponibilidade acima da quantidade pedida bloqueia
+a revisão. No checkout, a ação explícita de revisar/aceitar fica vinculada à
+versão da cotação e ao último evento relevante daquele carrinho. Uma nova
+versão/evento ou uma revalidação em andamento invalida a revisão anterior. A
+Fase 6 encerra no gate de revisão: formulário de pagamento e criação do pedido
+permanecem na Fase 7.
+
+### 12.4 Exercício com mocks
+
+O binding MSW continua emitindo pelo transporte `@mswjs/socket.io-binding`;
+o cliente de produção continua sendo o `socket.io-client` real. O painel
+`window.__mocks__` oferece replay de envelopes e contagem de sockets apenas
+para ferramentas/testes, permitindo enviar duplicatas e versões antigas pelo
+mesmo transporte Socket.IO — nenhum componente injeta setters ou eventos.
+`tests/e2e/realtime.spec.ts` cobre a atualização de preço/estoque, bloqueio
+até revisão da nova cotação, reconexão com reconciliação REST e transição de
+pedido pendente para terminal. `tests/e2e/realtime-pending-order.spec.ts`
+confirma que um pedido pendente recupera o estado terminal via REST após
+reconectar. `tests/e2e/realtime-session.spec.ts` cobre a troca de conta, a
+substituição do socket e o isolamento do carrinho privado.
+
+### 12.5 Bootstrap de transporte em modo mock
+
+`src/main.tsx` importa `src/app.tsx` dinamicamente somente depois de
+`worker.start()` concluir. Isso é necessário porque `engine.io-client` captura
+o construtor global `WebSocket` ao ser avaliado; importar a árvore de rotas
+antes da instalação do interceptor MSW faria o `socket.io-client` real abrir
+conexões nativas fora do binding mock. O adiamento mantém o contrato de
+transporte real, preservando o mesmo `getSessionSocket()` e os handlers MSW.
+
+`useRealtimeSync` também adia `socket.connect()` por uma microtask cancelável.
+Assim, o ciclo setup/cleanup extra do `StrictMode` não inicia uma conexão que
+será imediatamente descartada; a limpeza continua removendo listeners e
+desconectando o socket, enquanto logout/troca de sessão permanece sob
+responsabilidade de `disconnectSessionSocket()`.

@@ -13,13 +13,12 @@ export type RealtimeSocket = Socket<RealtimeServerToClientEvents, RealtimeClient
  *   `agent-realtime` (Fase 6);
  * - registra nenhum listener — reconciliação com REST, tolerância a
  *   duplicata/evento antigo e liberação de listeners no fim do ciclo de
- *   vida são lógica de domínio da Fase 6, documentada em
- *   `ARCHITECTURE.md`, não desta camada de transporte.
+ *   vida são responsabilidade de `useRealtimeSync`, não desta camada de
+ *   transporte.
  *
  * Nenhum componente deve simular estes eventos diretamente (ex.: chamando
  * setters) — isso é um critério eliminatório da seção 11. O binding do lado
- * do servidor simulado (`@mswjs/socket.io-binding` ou equivalente) é
- * responsabilidade do `agent-mocks` (Fase 2.3).
+ * do servidor simulado (`@mswjs/socket.io-binding`) fica na camada MSW.
  */
 export function createRealtimeSocket(): RealtimeSocket {
   return io(import.meta.env.VITE_SOCKET_URL ?? '/', {
