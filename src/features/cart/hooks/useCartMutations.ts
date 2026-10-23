@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/shared/query/keys'
-import type { AddCartItemRequest, CartItemId, UpdateCartItemRequest, UserId } from '@/shared/types'
+import type { AddCartItemRequest, CartItemId, CartResponse, UpdateCartItemRequest, UserId } from '@/shared/types'
 import { cartApi } from '../api/cart.api'
 
 /**
@@ -14,7 +14,11 @@ import { cartApi } from '../api/cart.api'
  */
 function useInvalidateCart(userId: UserId | 'guest') {
   const queryClient = useQueryClient()
-  return () => queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail(userId) })
+  return (cart: CartResponse) =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.cart.detail(userId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.quote.detail(cart.id) }),
+    ])
 }
 
 export function useAddCartItemMutation(userId: UserId | 'guest') {

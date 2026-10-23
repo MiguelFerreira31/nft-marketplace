@@ -219,10 +219,10 @@ Agente: `agent-catalog` · Validador: `val-manual-qa`
 ### Task 5.1 — Itens, cupom e totais
 Agente: `agent-cart` · Validador: `val-code-review`
 
-- [ ] Adicionar/alterar/remover respeitando disponibilidade por NFT/edição.
-- [ ] Persistência após refresh; itens de visitante preservados ao autenticar.
-- [ ] Cupom aplicado/removido com tratamento de inválido/expirado.
-- [ ] Subtotal, desconto, taxa de rede, total coerentes com a API; ETH como
+- [x] Adicionar/alterar/remover respeitando disponibilidade por NFT/edição.
+- [x] Persistência após refresh; itens de visitante preservados ao autenticar.
+- [x] Cupom aplicado/removido com tratamento de inválido/expirado.
+- [x] Subtotal, desconto, taxa de rede, total coerentes com a API; ETH como
       string decimal sem perda de precisão; quantidades inteiras.
 - [ ] Reflete mudanças de preço/disponibilidade recebidas com o carrinho aberto
       (depende da Fase 6 — integrar após).

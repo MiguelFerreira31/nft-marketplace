@@ -9,11 +9,15 @@ import { cartApi } from '../api/cart.api'
  * login (seção 3: "preservar os itens do visitante ao autenticar") — a
  * mesclagem em si é responsabilidade do `agent-cart`/`agent-auth` (Fases 3 e
  * 5); aqui só garantimos que a chave de cache nunca mistura os dois.
+ *
+ * Revalidar ao voltar o foco mantém preço e disponibilidade atuais até a
+ * integração Socket.IO da Fase 6.
  */
 export function useCartQuery(userId: UserId | 'guest') {
   return useQuery({
     queryKey: queryKeys.cart.detail(userId),
     queryFn: ({ signal }) => cartApi.get(signal),
     staleTime: 10_000,
+    refetchOnWindowFocus: true,
   })
 }

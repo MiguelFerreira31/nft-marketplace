@@ -1289,3 +1289,55 @@ preservando `header`/`footer` com a mensagem genérica "Página não
 encontrada" (sem regressão); detalhe de um NFT existente
 (`nft-art-4`) e o catálogo da Início continuam renderizando normalmente
 (sem regressão no restante da Fase 4).
+
+## 11. Carrinho (Fase 5 — Task 5.1, `agent-cart`)
+
+`src/routes/cart.tsx` substitui o skeleton da Fase 1 pelo carrinho funcional
+em `/cart`. A rota permanece pública: `useSessionQuery` identifica se deve
+consultar o carrinho do usuário ou o de visitante (`'guest'`), com uma query
+key separada por identidade (`queryKeys.cart.detail(userId)`). Se a sessão
+não puder ser verificada por falha de rede/servidor, a página mostra erro e
+oferece nova tentativa em vez de apresentar silenciosamente um carrinho de
+visitante.
+
+- `CartItemRow` usa `useUpdateCartItemMutation` e
+  `useRemoveCartItemMutation`; quantidade, disponibilidade, preço unitário e
+  subtotal exibidos vêm do `CartItem` retornado pela API. Conflito de estoque
+  ou item removido remotamente provoca refetch do carrinho, e os erros das
+  mutations ficam visíveis na própria linha. Itens esgotados ainda podem ser
+  removidos; quantidades acima do estoque são sinalizadas para ajuste.
+- `CouponForm` aplica/remove cupom com `useApplyCouponMutation`/
+  `useRemoveCouponMutation`. A cotação retornada pela mutation atualiza o
+  cache diretamente; quando existe cotação em cache, inclusive com
+  `couponCode: null`, ela é a fonte autoritativa para representar o cupom
+  (não o campo possivelmente antigo do carrinho).
+- `CartTotals` lê subtotal, desconto, taxa de rede e total diretamente de
+  `Quote`. Nenhum valor monetário é recalculado na UI. Falha na cotação tem
+  mensagem e ação de retry; totais em carregamento usam o skeleton existente.
+- O botão "Atualizar preços e disponibilidade" refaz primeiro `GET /cart`
+  (que recalcula preço e estoque atuais no mock, §8.4) e depois busca a
+  cotação, garantindo que a cotação não leia o carrinho antes da atualização
+  dos itens. A query do carrinho também revalida ao recuperar foco.
+- Persistência após refresh e mesclagem do carrinho de visitante ao
+  autenticar pertencem ao estado/handler MSW da Fase 2 (§8.2/§8.4); a tela
+  seleciona o carrinho usando a sessão real da Fase 3 e não duplica essa
+  lógica. A integração de `nft.updated` com atualização imediata da tela é
+  deixada para a Fase 6; até lá, refetch manual, mutations e retorno ao foco
+  atualizam os dados.
+- O merge mantém as quantidades completas mesmo se o estoque tiver mudado
+  durante a navegação como visitante. A linha sinaliza o excesso e impede
+  seguir ao checkout até o usuário ajustar ou remover o item; nenhuma
+  quantidade é descartada silenciosamente.
+
+### 11.1 Validação manual da Fase 5
+
+Executado em Chromium headless contra `npm run dev` com
+`VITE_ENABLE_MOCKS=true`: estado vazio; inclusão e alteração de quantidade;
+subtotal/total comparados à resposta de `/api/carts/:cartId/quote` após a
+mutation; cupom válido, remoção, inválido e expirado; remoção do item e
+retorno ao estado vazio; persistência após refresh; e merge visitante→usuário
+após login. Também foi reduzido o estoque da edição abaixo da quantidade
+combinada, confirmando que o merge preserva todos os itens, sinaliza o
+excesso e desabilita o botão de checkout. `npm run typecheck`, `npm run lint`
+e `npm run build` passaram. A reconciliação imediata por Socket.IO e o
+cenário completo de alteração durante checkout ficam para a Fase 6.

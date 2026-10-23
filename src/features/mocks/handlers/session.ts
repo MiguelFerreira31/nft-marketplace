@@ -44,7 +44,7 @@ function mergeGuestCartInto(db: MockDb, user: MockUserRecord): void {
   for (const guestItem of db.guestCart.items) {
     const existing = user.cart.items.find((item) => item.editionId === guestItem.editionId)
     if (existing) {
-      existing.quantity = Math.min(existing.quantity + guestItem.quantity, existing.availableQuantity)
+      existing.quantity += guestItem.quantity
     } else {
       user.cart.items.push({ ...guestItem, id: createMockId('cart-item') as CartItemId })
     }

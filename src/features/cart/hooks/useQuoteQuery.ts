@@ -7,6 +7,8 @@ import { quoteApi } from '../api/quote.api'
  * de checkout (seção 3: "Revalidar preço, disponibilidade, cupom e taxas
  * antes de confirmar a compra"). O componente de checkout (Fase 7) deve
  * refazer este fetch imediatamente antes de habilitar o botão de confirmar.
+ * Revalidar ao voltar o foco também atualiza os valores do carrinho enquanto
+ * o usuário retorna à aba.
  */
 export function useQuoteQuery(cartId: string | undefined) {
   return useQuery({
@@ -14,6 +16,7 @@ export function useQuoteQuery(cartId: string | undefined) {
     queryFn: ({ signal }) => quoteApi.get(cartId as string, signal),
     enabled: Boolean(cartId),
     staleTime: 0,
+    refetchOnWindowFocus: true,
   })
 }
 
