@@ -5,7 +5,7 @@ de arquitetura, contratos e política de cache/estado estão documentadas em
 [`ARCHITECTURE.md`](ARCHITECTURE.md); o plano de fases (com os gates de
 validação de cada uma) está em [`PLAN.md`](PLAN.md).
 
-**Deploy:** _(adicionar URL pública após o deploy na Vercel)_
+**Deploy:** https://nft-marketplace-eta-peach.vercel.app
 
 ## Stack
 
