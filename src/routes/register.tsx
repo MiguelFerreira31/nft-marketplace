@@ -63,7 +63,11 @@ function RegisterPage() {
       { name: name.trim(), email: email.trim(), password },
       {
         onSuccess: () => {
-          navigate({ to: safeRedirectTarget(redirect) })
+          // Ver o comentário equivalente em `src/routes/login.tsx`: `href`
+          // (não `to`) é a opção correta para navegar para uma URL relativa
+          // já resolvida que pode incluir querystring (ex.: redirect vindo
+          // do catálogo com filtros).
+          navigate({ href: safeRedirectTarget(redirect) })
         },
         onError: (error) => {
           const mapped = mapAuthError(error)

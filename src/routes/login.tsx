@@ -58,7 +58,15 @@ function LoginPage() {
       { email: email.trim(), password },
       {
         onSuccess: () => {
-          navigate({ to: safeRedirectTarget(redirect) })
+          // `safeRedirectTarget` devolve uma URL relativa completa (pathname +
+          // querystring, ex.: "/?category=..." vindo do catálogo com
+          // filtros). `to` só aceita um padrão de rota — passar uma string
+          // com querystring embutida nele não navega (o router não acha
+          // rota correspondente). `href` é a opção pensada exatamente para
+          // "navegar para uma URL relativa já resolvida", reaproveitando o
+          // parser de busca do próprio router (round-trip simétrico com o
+          // `location.href` usado por `requireAuth`/`FavoriteButton`).
+          navigate({ href: safeRedirectTarget(redirect) })
         },
         onError: (error) => {
           const mapped = mapAuthError(error)

@@ -1,8 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { AppShell } from '@/components/layout/app-shell'
-import { Button } from '@/components/ui/button'
+import { NotFoundState } from '@/components/not-found-state'
 import { useSessionExpiryRedirect } from '@/shared/session/useSessionExpiryRedirect'
 
 /**
@@ -26,7 +26,7 @@ export interface RouterContext {
  */
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
-  notFoundComponent: NotFoundPage,
+  notFoundComponent: () => <NotFoundState />,
 })
 
 function RootLayout() {
@@ -41,20 +41,5 @@ function RootLayout() {
       <Outlet />
       {import.meta.env.DEV ? <TanStackRouterDevtools position="bottom-right" /> : null}
     </AppShell>
-  )
-}
-
-function NotFoundPage() {
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-      <p className="text-sm font-medium text-muted-foreground">Erro 404</p>
-      <h1 className="text-2xl font-semibold">Página não encontrada</h1>
-      <p className="max-w-md text-sm text-muted-foreground">
-        O endereço acessado não corresponde a nenhuma tela do marketplace. Confira a URL ou volte ao início.
-      </p>
-      <Button asChild>
-        <Link to="/">Voltar ao início</Link>
-      </Button>
-    </div>
   )
 }

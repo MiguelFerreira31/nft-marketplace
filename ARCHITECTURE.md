@@ -1063,3 +1063,229 @@ brinquedo em `localStorage` da Fase 1, documentada como provisória desde a
 criação) foram removidos — nenhum import deles sobrevive em `src/**`.
 `src/shared/session/safeRedirect.ts` foi mantido sem alterações (já não
 dependia do mock).
+
+## 10. Catálogo e detalhe do NFT (Fase 4 — Tasks 4.1/4.2, `agent-catalog`)
+
+Esta seção documenta a substituição dos skeletons placeholder (Fase 1, §6.6)
+pelas telas reais de Início e Detalhe do NFT: destaques, catálogo com busca/
+filtros/ordenação/paginação na URL, e o detalhe com galeria, edição,
+quantidade, favoritos e compra. Nenhum contrato/handler da Fase 0/2 foi
+alterado — esta fase só consome `useNftsQuery`/`useNftDetailQuery`/
+`useFavoritesQuery`/`useToggleFavoriteMutation` (plumbing já existente) e o
+guard `requireAuth`/padrão `redirect` já estabelecido pela Fase 3.
+
+### 10.1 Início — destaques, catálogo, busca/filtros/ordenação/paginação
+
+- `src/routes/index.tsx` consome `Route.useSearch()` (já tipado como
+  `NftListQuery` completo e resolvido pela Fase 1, `catalogSearchSchema`)
+  diretamente como parâmetro de `useNftsQuery` — não existe nenhum estado de
+  filtro fora da URL, então refresh/histórico funcionam "de graça": a mesma
+  fonte de verdade é lida em qualquer entrada na rota (navegação SPA, link
+  colado, refresh, voltar/avançar).
+- `src/features/catalog/components/catalog-toolbar.tsx` (busca, categorias,
+  faixa de preço, ordenação) e `catalog-pagination.tsx`: toda mudança de
+  filtro chama `onApplyFilters` (`HomePage#applyFilters`), que SEMPRE
+  reinicia `page` para `CATALOG_SEARCH_DEFAULTS.page` (readme §3: "mudança
+  de filtro deve reiniciar a paginação") — a paginação em si
+  (`CatalogPagination#onPageChange`) é o único caminho que muda `page` sem
+  resetá-lo.
+- **Debounce só no campo, não na navegação**: busca textual e faixa de
+  preço usam um rascunho local (`useState`) + `useDebouncedValue` (400/500ms)
+  dentro do próprio campo (`SearchField`/`PriceField` em
+  `catalog-toolbar.tsx`); só quando o valor debounced diverge do valor atual
+  da URL é que `onApplyFilters` dispara UM `navigate()` — evita empilhar uma
+  entrada de histórico por tecla digitada, mas ainda assim cada filtro
+  "assentado" (categoria, preço, ordenação) ganha sua própria entrada,
+  satisfazendo o gate de voltar/avançar.
+- Categorias do filtro são uma constante local
+  (`src/features/catalog/constants.ts#CATALOG_CATEGORY_OPTIONS`) com os
+  MESMOS valores de `features/mocks/fixtures/types.ts#NFT_CATEGORIES`
+  (Fase 2) — deliberadamente duplicados em vez de importados: UI de produto
+  não deve depender de `features/mocks` (que não existe fora do cenário de
+  demonstração/dev/teste); se as fixtures um dia ganharem categoria nova,
+  esta constante precisa ser atualizada manualmente (registrado no comentário
+  do próprio arquivo).
+- Estados de carregamento/vazio/erro: `useNftsQuery` usa
+  `placeholderData: keepPreviousData` (Fase 0) — por isso `isPending` (sem
+  nenhum dado ainda) só é verdadeiro na primeiríssima carga, tratado com
+  `CatalogGridSkeleton`; qualquer fetch subsequente (filtro/página) mantém a
+  grade anterior visível com opacidade reduzida (`aria-busy`) em vez de
+  voltar ao skeleton — evita layout shift e "flash" a cada navegação.
+  `CatalogEmptyState` distingue "nenhum NFT no catálogo" de "nenhum
+  resultado para os filtros atuais" (oferecendo limpar filtros só no segundo
+  caso). `CatalogErrorState` traduz o erro (`lib/api-error-message.ts`) e
+  oferece retry (`refetch()`).
+- "Respostas fora de ordem": já coberto pela política de cache da Fase 0
+  (query key = parâmetros completos, `AbortSignal` propagado) — esta fase
+  não precisou de nenhum código adicional, só confirmou manualmente (via
+  `window.__mocks__.setScenario({ latencyMs: ... })` + troca rápida de
+  filtro) que a resposta aplicada é sempre a da combinação de parâmetros
+  mais recente.
+- "Destaques" (`features/catalog/components/featured-nfts.tsx`): uma
+  segunda chamada a `useNftsQuery` com parâmetros FIXOS
+  (`sortKey: 'relevance', sortOrder: 'desc', pageSize: 4`), independente da
+  busca/filtros ativos na URL — cache isolado (key própria) do catálogo
+  principal.
+
+### 10.2 Detalhe do NFT — galeria, edição, quantidade, favoritos, compra
+
+- `src/routes/nfts.$nftId.tsx`: todos os hooks (`useNftDetailQuery`,
+  `useAddCartItemMutation`, `useState`/`useMemo` locais) são chamados
+  incondicionalmente no topo do componente; só DEPOIS deles o fluxo pode
+  `throw notFound()`/retornar skeleton/erro — `throw notFound()` dentro do
+  corpo de um componente de rota É o padrão suportado pelo TanStack Router
+  (`CatchNotFound`/`CatchBoundary` envolvem o componente da rota — ver
+  `@tanstack/react-router/dist/esm/Match.js`), capturado pelo
+  `notFoundComponent` da rota raiz (Fase 1); zero hook é pulado
+  condicionalmente em nenhum caminho de renderização.
+- NFT inexistente: `GET /nfts/:id` 404 `NOT_FOUND` → `throw notFound()`
+  (não um erro genérico) — distinto de qualquer outro código de erro, que
+  cai no estado de erro local com retry (`CatalogErrorState`, reaproveitado
+  do catálogo).
+- Edição: `pickDefaultEdition()` resolve, em ordem, a edição do deep link
+  (`search.editionId`, Fase 1) se ainda existir, senão a primeira com
+  estoque, senão a primeira de todas (caso geral esgotado) — trocar de
+  edição via `EditionPicker` usa `navigate({ search, replace: true })` (não
+  empilha histórico: é um refinamento da mesma tela, diferente dos filtros
+  do catálogo).
+- Quantidade (`QuantityStepper`): `max` = `availableQuantity` da edição
+  selecionada; o botão "+" e o atributo `max` do `<input type=number>`
+  impedem digitar/incrementar acima do disponível, e `handleAddToCart`
+  reconfirma o limite antes de disparar a mutation (`canAddToCart`) — a ação
+  de comprar é desabilitada ANTES do clique quando a edição está esgotada ou
+  a quantidade excede o disponível, não apenas tratada como erro depois.
+  Resetar a quantidade quando a edição muda usa o padrão React de "ajustar
+  estado durante a renderização" (comparar `selectedEdition.id` com um
+  `lastEditionId` guardado em estado, e chamar os setters num `if` no corpo
+  do componente) em vez de `useEffect` — evita o aviso `set-state-in-effect`
+  do `oxlint` e o re-render extra de um efeito.
+- **Decisão deliberada: nenhum "subtotal estimado" (preço × quantidade) é
+  calculado no cliente antes de adicionar ao carrinho** — só o preço
+  unitário da edição é exibido. Mantém a regra da seção 3.2 (nenhum valor
+  monetário é derivado localmente de forma divergente da API) mesmo fora do
+  carrinho/cotação propriamente ditos; o subtotal real aparece só quando o
+  item já está no carrinho (Fase 5), calculado pela API.
+- Comprar/"Adicionar ao carrinho" dispara `useAddCartItemMutation` (plumbing
+  da Fase 0) com `{ editionId, quantity }` — carrinho não exige sessão
+  (`userId ?? 'guest'`), consistente com a Fase 1 (`/cart` não é rota
+  privada). Em caso de `409 CONFLICT STOCK_UNAVAILABLE` (edição ficou sem
+  estoque suficiente entre a leitura do detalhe e o clique — readme §7), a
+  página refaz `GET /nfts/:id` para a UI refletir a disponibilidade real
+  antes de qualquer nova tentativa; nenhum estado de "sucesso" é mostrado
+  sem a resposta da mutation.
+
+### 10.3 Favoritos — autenticação obrigatória com retomada de contexto
+
+`src/features/catalog/components/favorite-button.tsx` (reaproveitado pelo
+card de listagem e pelo detalhe):
+
+- **Sem sessão**: renderiza um `<Link to="/login" search={{ redirect:
+  location.href }}>` REAL (não um botão com `onClick` condicional) — a
+  mesma semântica de `requireAuth` (Fase 3), mas acionada no clique em vez
+  de um guard de rota, porque favoritar não é uma rota própria (vive dentro
+  do catálogo/detalhe, que são públicos). Navegável por teclado/sem JS,
+  anúncio correto por leitor de tela (`aria-label`).
+- **Com sessão**: dispara `useToggleFavoriteMutation` (otimista + rollback,
+  já implementado na Fase 0) passando o objeto `NftSummary`/`NftDetail` já
+  carregado — nenhum GET extra. Um `role="status"` oculto (`sr-only`)
+  anuncia sucesso/erro da mutation para leitor de tela sem alterar o layout
+  visível (readme §8: "feedback acessível para mutations").
+- Favoritos persistem por usuário autenticado: já garantido pela Fase 0/2/3
+  (query key `favorites.all(userId)`, isolamento de cache por usuário,
+  handlers MSW stateful) — esta fase só liga a UI a esse plumbing existente.
+
+### 10.4 Bug real encontrado e corrigido: 404 de NFT específico perdia o `AppShell`
+
+Achado pelo gate `val-manual-qa` da Fase 4: `throw notFound()` lançado de
+dentro do componente da rota `/nfts/$nftId` (NFT inexistente) era capturado
+pelo `notFoundComponent` da ROTA RAIZ (`src/routes/__root.tsx`), que (até
+então) envolvia o `RootLayout` INTEIRO — ou seja, o `AppShell` (header/nav/
+footer) desaparecia por completo, tanto em acesso direto por URL quanto em
+navegação client-side (clique num link morto/favorito removido/deep link
+velho). Confirmado via DOM (`header`/`footer` ausentes) e visualmente. Em
+contraste, uma rota totalmente desconhecida (`/rota-inexistente`, nenhuma
+rota do router casa com o caminho) preservava o `AppShell` normalmente —
+porque esse caso é resolvido DENTRO do `<Outlet />` (ver
+`@tanstack/react-router` `Outlet`/`renderRouteNotFound`), não por um `throw`
+capturado por um `CatchNotFound` posicionado ao redor do `RootLayout`.
+
+Causa raiz (lendo `@tanstack/react-router/dist/esm/Match.js`): cada MATCH de
+rota só é envolvido por um `CatchNotFound` SE aquela própria rota define
+`notFoundComponent` (`route.options.notFoundComponent`, ou o da raiz quando
+`route.isRoot`). Como só a rota raiz definia essa opção, o `CatchNotFound`
+mais próximo de um `notFound()` lançado dentro de `/nfts/$nftId` era o da
+RAIZ — que embrulha o `MatchInner` da raiz, isto é, o `RootLayout`
+(`<AppShell><Outlet/></AppShell>`) por fora, substituindo tudo.
+
+Correção: `src/routes/nfts.$nftId.tsx` agora define seu PRÓPRIO
+`notFoundComponent` (reaproveitando `src/components/not-found-state.tsx`,
+extraído do que antes vivia só em `__root.tsx`). Um `notFoundComponent`
+local é capturado pelo `CatchNotFound` DESSA rota, que embrulha só o
+`MatchInner` daquele match — conteúdo que é renderizado DENTRO do
+`<Outlet />` da raiz, ou seja, ainda dentro do `AppShell`. `__root.tsx`
+continua com seu próprio `notFoundComponent` (mesmo componente
+`NotFoundState`, sem título/mensagem customizados) para o caso de rota
+totalmente desconhecida — agora os dois 404 usam o MESMO padrão visual
+(readme §1: "Estados não desenhados devem seguir o mesmo padrão visual"),
+diferindo só no texto (mensagem específica de NFT vs. mensagem genérica de
+rota), e ambos preservam header/nav/footer. Validado manualmente (acesso
+direto e navegação client-side a um `nftId` inexistente, e acesso a uma
+rota desconhecida) — ver §10.6.
+
+### 10.5 Bug real encontrado e corrigido: retomada de login para um destino com querystring
+
+Validação manual (ver §10.5) descobriu que `src/routes/login.tsx` e
+`register.tsx` retomavam `search.redirect` com
+`navigate({ to: safeRedirectTarget(redirect) })`. Isso funcionava para
+destinos sem querystring (ex.: `/account/profile`, único caso exercitado
+pela Fase 3), mas **falhava silenciosamente** sempre que o destino incluía
+parâmetros de busca (ex.: `/?category=...&page=2`, agora comum vindo do
+catálogo) — `to` é resolvido pelo router como um PADRÃO DE ROTA, não como
+uma URL relativa completa; uma string contendo `?`/`&` não casa com
+nenhuma rota, e a navegação simplesmente não acontece (o usuário ficava
+preso em `/login`, sem nenhum erro visível).
+
+Correção: `navigate({ href: safeRedirectTarget(redirect) })`. `href` é uma
+opção de primeira classe do TanStack Router (`NavigateOptions['href']`,
+`@tanstack/router-core` `buildLocation`) pensada exatamente para "navegar
+para uma URL relativa já resolvida" — internamente chama `parseHref()` e
+`this.options.parseSearch()` (a MESMA função usada para interpretar a URL
+da barra de endereço), garantindo round-trip simétrico com o
+`location.href` usado tanto por `requireAuth` (Fase 3) quanto por
+`FavoriteButton` (Fase 4) para montar `search.redirect`. Nenhuma rota
+privada ficou exposta por esse bug (ele só impedia a retomada, nunca
+pulava a autenticação), mas violava diretamente o critério "retorno ao
+fluxo anterior" do login (readme §3) para qualquer destino com filtros —
+por isso foi corrigido nesta entrega, embora os arquivos pertençam à Fase 3.
+
+### 10.6 Validação manual desta entrega
+
+Rodado manualmente contra `npm run dev` com `VITE_ENABLE_MOCKS=true`
+(Playwright headless ad hoc, não versionado — suíte real é Fase 10,
+`agent-tests`): três filtros combinados (categoria + ordenação + preço
+mínimo) reiniciando a paginação a cada mudança; navegação direta por URL
+com `pageSize` reduzido preservando os três filtros (acesso direto);
+avançar para a página 2; refresh preservando página/filtros exatos (mesma
+URL, mesma contagem de itens); botão voltar do navegador restaurando
+corretamente página 1 com os mesmos filtros; favoritar deslogado → redirect
+para `/login?redirect=...` → login → retomada em `/?page=1&pageSize=12` →
+favoritar com sucesso; tentativa de comprar `nft-sold-out-demo` com o botão
+já desabilitado e a mensagem de esgotado visível; `nft-low-stock-demo` com o
+botão "+" da quantidade já desabilitado em 1/1; acesso a um `nftId`
+inexistente resultando na página 404 do app (não um erro genérico);
+busca sem resultados mostrando o estado vazio com opção de limpar filtros;
+cenário `networkDown` em `nfts.list` resultando no estado de erro com retry
+(após o retry genérico do `QueryClient` se esgotar); e falha forçada
+(`forceError`) em `favorites.add` mostrando o flip otimista imediato
+(`aria-pressed` muda no mesmo instante do clique) seguido do rollback para
+o estado original dentro de ~1s.
+
+Validação adicional após o gate `val-manual-qa` apontar o bug do §10.4:
+`nftId` inexistente por acesso direto por URL e por navegação client-side
+(clique num link morto construído na página) — nos dois casos `header`,
+`nav` e `footer` presentes no DOM e a mensagem específica "NFT não
+encontrado" visível; `/rota-completamente-desconhecida` continua
+preservando `header`/`footer` com a mensagem genérica "Página não
+encontrada" (sem regressão); detalhe de um NFT existente
+(`nft-art-4`) e o catálogo da Início continuam renderizando normalmente
+(sem regressão no restante da Fase 4).
