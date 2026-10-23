@@ -268,6 +268,15 @@ literalmente e confirma bloqueio de confirmação com cotação velha.
 ### Task 7.1 — Fluxo de pagamento
 Agente: `agent-checkout` · Validador: `val-code-review`
 
+> **Nota herdada do gate da Fase 3** (`val-code-review`, achado MÉDIO): o
+> guard `requireAuth` admite sessão em cache sem revalidar
+> (`revalidateIfStale` ausente em `sessionQueryOptions()`), mitigado hoje só
+> porque `/checkout` e `/orders/$orderId` não disparam nenhum fetch
+> autenticado (são stubs). Ao implementar esta task, replique o padrão de
+> `/account/profile` (um `useQuery` real logo no mount) ou passe
+> `revalidateIfStale: true` no guard — sem isso, sessão expirada pode admitir
+> acesso indevido ao checkout real. Ver `ARCHITECTURE.md` §9.3(2)/§9.4.
+
 - [ ] Dados do colecionador, seleção de carteira/rede, simulação de conexão,
       recusa e desconexão.
 - [ ] Revalidação de preço, disponibilidade, cupom e taxas antes de confirmar;
@@ -398,7 +407,12 @@ Agente: `agent-devops` · Validador: `val-deploy`
       falha.
 - [ ] `ARCHITECTURE.md`: contratos REST/eventos, política de sessão, estado
       do carrinho, estratégia de cache, reconciliação REST↔Socket.IO,
-      limitações, decisões de UX, desvios do Figma.
+      limitações, decisões de UX, desvios do Figma. Inclua como débito
+      técnico conhecido (achado BAIXO do gate da Fase 3, `val-code-review`):
+      `adoptSession` exclui a key `session` do cancelamento de queries em
+      voo; seguro hoje só porque o MSW lê estado "ao vivo" no momento da
+      resposta, mas precisa de `cancelQueries` defensivo antes de qualquer
+      troca por backend real (fora do escopo deste desafio).
 - [ ] Deploy público (Vercel/Netlify/Cloudflare Pages) com mocks e tempo real
       funcionando em produção estática.
 - [ ] Acesso direto e refresh de qualquer rota funcionando no ambiente

@@ -9,7 +9,7 @@ import { requireAuth } from '@/shared/session/requireAuth'
  * `requireAuth`).
  */
 export const Route = createFileRoute('/checkout')({
-  beforeLoad: ({ location }) => requireAuth(location),
+  beforeLoad: ({ context, location }) => requireAuth({ context, location }),
   component: CheckoutPage,
 })
 

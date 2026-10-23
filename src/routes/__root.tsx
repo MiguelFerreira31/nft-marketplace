@@ -3,13 +3,14 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
 import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
+import { useSessionExpiryRedirect } from '@/shared/session/useSessionExpiryRedirect'
 
 /**
- * Contexto do router. Hoje só carrega o `QueryClient` (injetado em
- * `main.tsx`) — ver `ARCHITECTURE.md` §4 para a política de cache que ele
- * implementa. A sessão privada usa `mockSession`/`requireAuth`
- * diretamente nas rotas (não via contexto) — ver
- * `src/shared/session/mockSession.ts` para o porquê de ser provisório.
+ * Contexto do router: carrega o `QueryClient` (injetado em `main.tsx`) — ver
+ * `ARCHITECTURE.md` §4 para a política de cache que ele implementa.
+ * `requireAuth` (Fase 3, `src/shared/session/requireAuth.ts`) lê a sessão
+ * real a partir deste mesmo `QueryClient` no `beforeLoad` de cada rota
+ * privada.
  */
 export interface RouterContext {
   queryClient: QueryClient
@@ -29,6 +30,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootLayout() {
+  // Montado uma única vez para toda a árvore de rotas (Fase 3, `agent-auth`):
+  // trata expiração de sessão detectada durante a navegação/checkout,
+  // preservando o contexto para retomada — ver
+  // `src/shared/session/useSessionExpiryRedirect.ts`.
+  useSessionExpiryRedirect()
+
   return (
     <AppShell>
       <Outlet />

@@ -2,8 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { mockSession } from '@/shared/session/mockSession'
-import { useMockSession } from '@/shared/session/useMockSession'
+import { useLogoutMutation, useSessionQuery } from '@/features/account/hooks/useSessionQuery'
 
 const navLinkClassName =
   'rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground'
@@ -14,19 +13,26 @@ const navLinkClassName =
  * disclosure acionado pelo botão de menu; a partir de `md` ficam sempre
  * visíveis em linha.
  *
- * O estado de sessão vem de `useMockSession` (provisório — ver
- * `src/shared/session/mockSession.ts`; a Fase 3 troca por sessão real sem
- * precisar alterar a estrutura deste componente).
+ * O estado de sessão vem de `useSessionQuery` (Fase 3, `agent-auth`) — a
+ * mesma fonte de verdade usada pelos guards de rota (`requireAuth`) e pela
+ * detecção de expiração (`useSessionExpiryRedirect`).
  */
 export function SiteHeader() {
-  const { isAuthenticated, user } = useMockSession()
+  const { data: session } = useSessionQuery()
+  const logoutMutation = useLogoutMutation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const isAuthenticated = Boolean(session)
+  const user = session?.user
+
   function handleLogout() {
-    mockSession.logout()
-    setMobileOpen(false)
-    navigate({ to: '/' })
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        setMobileOpen(false)
+        navigate({ to: '/' })
+      },
+    })
   }
 
   return (
@@ -59,8 +65,8 @@ export function SiteHeader() {
           {isAuthenticated ? (
             <>
               <span className="text-sm text-muted-foreground">{user?.name}</span>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                Sair
+              <Button variant="outline" size="sm" onClick={handleLogout} disabled={logoutMutation.isPending}>
+                {logoutMutation.isPending ? 'Saindo…' : 'Sair'}
               </Button>
             </>
           ) : (
@@ -104,8 +110,8 @@ export function SiteHeader() {
               <Link to="/account/wallets" className={navLinkClassName} activeProps={{ className: 'active' }} onClick={() => setMobileOpen(false)}>
                 Carteiras
               </Link>
-              <Button variant="outline" size="sm" className="mt-2 w-fit" onClick={handleLogout}>
-                Sair
+              <Button variant="outline" size="sm" className="mt-2 w-fit" onClick={handleLogout} disabled={logoutMutation.isPending}>
+                {logoutMutation.isPending ? 'Saindo…' : 'Sair'}
               </Button>
             </>
           ) : (

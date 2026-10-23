@@ -10,7 +10,7 @@ import { requireAuth } from '@/shared/session/requireAuth'
  * refresh/reconexão enquanto o pedido estiver `pending` (readme §7).
  */
 export const Route = createFileRoute('/orders/$orderId')({
-  beforeLoad: ({ location }) => requireAuth(location),
+  beforeLoad: ({ context, location }) => requireAuth({ context, location }),
   component: OrderConfirmationPage,
 })
 

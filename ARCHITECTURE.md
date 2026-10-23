@@ -876,3 +876,190 @@ carrinho, cenário `pending-forever` resolvido manualmente via painel de
 controle, e o evento `nft.updated`/`order.updated` chegando por um
 `socket.io-client` real tanto em `npm run dev` quanto no build de
 demonstração servido por `vite preview`.
+
+## 9. Conta e sessão real (Fase 3 — Task 3.1, `agent-auth`)
+
+Esta seção documenta a substituição da sessão mock da Fase 1 (§6.3) pela
+sessão real: formulários de cadastro/login, logout, guard de rota privada
+baseado em `useSessionQuery`, tratamento de expiração durante navegação e
+checkout, e isolamento de cache/subscriptions na troca de usuário (critério
+eliminatório da seção 11 do readme — "exposição de dados entre usuários").
+Nenhum handler/contrato da Fase 2 (§8) foi alterado; esta fase só troca o
+que consome esses handlers no cliente.
+
+### 9.1 Formulários (readme §3: "Cadastro... criação de conta, validação e
+tratamento de conflito"; "Login... autenticação, validação e retorno ao
+fluxo anterior")
+
+- `src/routes/login.tsx`/`register.tsx`: formulários controlados (sem
+  biblioteca de formulário — nenhuma estava instalada e o volume de campos
+  não justifica adicionar uma dependência nova só para a Task 3.1), com
+  validação client-side (e-mail, tamanho mínimo de senha, confirmação de
+  senha no cadastro) ANTES de qualquer chamada à API, e mapeamento dos
+  erros da API (`src/features/account/lib/form-errors.ts#mapAuthError`):
+  - 400 `VALIDATION_ERROR` → mensagem por campo (`fieldErrors`), associada
+    ao `<input>` via `aria-describedby`/`aria-invalid`.
+  - 409 `CONFLICT`/`DUPLICATE_EMAIL` (cadastro com e-mail já existente) →
+    mensagem no campo `email`.
+  - Demais erros (`TRANSIENT_ERROR`, falha de rede, etc.) → banner
+    (`Alert` do shadcn) genérico acima do formulário.
+- `/register` aceita `search.redirect` (mesmo contrato de `/login`) e os
+  dois formulários trocam o parâmetro entre si nos links "Cadastre-se"/
+  "Entrar" — um usuário redirecionado para `/login?redirect=/checkout` que
+  clique em "Cadastre-se" continua retomando `/checkout` depois de criar a
+  conta (um cadastro bem-sucedido já autentica, `RegisterResponse = Session`
+  no contrato da Fase 0).
+- Componentes shadcn adicionados nesta fase: `input`, `label`, `alert`
+  (`npx shadcn add input label alert`) — não existiam até então.
+
+### 9.2 Sessão recuperável após refresh e guard de rota privada
+
+- `src/features/account/hooks/useSessionQuery.ts#sessionQueryOptions()` é a
+  ÚNICA fonte de `queryKey`/`queryFn`/`staleTime` da sessão, reaproveitada
+  tanto por `useSessionQuery` (componentes) quanto por `requireAuth`
+  (`beforeLoad`, via `context.queryClient.ensureQueryData(...)`) — os dois
+  caminhos leem/escrevem a mesma entrada de cache.
+- `requireAuth` (`src/shared/session/requireAuth.ts`) substitui o guard
+  mock da Fase 1 mantendo a mesma assinatura de efeito (`redirect` para
+  `/login` com `search.redirect = location.href`), mas agora decide com
+  base na sessão REAL. Usado em `beforeLoad` das 4 rotas privadas:
+  `/checkout`, `/orders/$orderId`, `/account/profile`, `/account/wallets`.
+- Sessão sobrevive a refresh **sem nenhum código de persistência no
+  cliente**: o "banco" do MSW (§8.2) já persiste `db.session` em
+  `localStorage`; um `GET /session` após o refresh simplesmente devolve o
+  mesmo ponteiro de sessão ainda válido. `requireAuth` aguarda esse
+  primeiro `GET /session` (via `ensureQueryData`) antes de decidir — não há
+  "flash" de redirecionamento para `/login` durante o carregamento inicial.
+- `src/routes/account.profile.tsx`/`account.wallets.tsx` passaram a
+  consultar `useProfileQuery`/`useWalletsQuery` de verdade (somente
+  leitura; edição completa é Fase 8, `agent-account`) — decisão desta fase
+  para ter um recurso autenticado e isolado por `UserId` de fato exercitado
+  pelo guard e pela troca de usuário (ver §9.4), em vez de só mostrar dados
+  da sessão em si.
+
+### 9.3 Expiração durante navegação e checkout, preservando contexto
+
+Readme §3: "Trate expiração durante a navegação e durante o checkout,
+preservando o contexto para retomada." Três caminhos alimentam a mesma
+reação (`src/shared/session/useSessionExpiryRedirect.ts`, montado uma
+única vez em `src/routes/__root.tsx`):
+
+1. **Navegação "dura"/direta** (URL colada, refresh): `requireAuth`
+   detecta no próprio `beforeLoad` (sessão `null`) e lança o redirect.
+2. **Navegação client-side (SPA) dentro do `staleTime` de 10s da sessão**:
+   o `beforeLoad` por si só pode não perceber a expiração (cache da sessão
+   ainda "fresco"). Quem pega isso é a MUTATION/QUERY autenticada da rota
+   de destino (ex.: `GET /wallets`, `GET /profile`) respondendo 401
+   `INVALID_SESSION` — o interceptor do Axios (`src/shared/api/http.ts`)
+   detecta o código do erro e chama
+   `src/shared/session/session-expiry.ts#notifySessionExpired()`, que
+   invoca o handler registrado por `useSessionExpiryRedirect`. É por isso
+   que vale a pena as rotas de perfil/carteiras já fazerem fetch real
+   (§9.2) mesmo antes da Fase 8: dão ao mecanismo de expiração algo
+   autenticado para de fato disparar o 401 durante uma navegação comum.
+   Pela mesma mecânica, qualquer mutation de checkout que a Fase 7 vier a
+   escrever (`POST /orders`, revalidação de cotação, etc.) já está
+   coberta: um 401 ali também soa o mesmo alarme.
+3. **Detecção passiva (nenhum request falhou)**: `useSessionQuery` tem
+   `refetchInterval: 30_000` (além do `staleTime: 10_000` já documentado na
+   Fase 0/§4.1); se o usuário fica parado numa tela privada sem navegar e
+   sem disparar nenhuma mutation, o refetch periódico da própria sessão
+   eventualmente descobre `null` (ex.: cenário `sessionForceExpired` do
+   painel de controle, ou o `expiresAt` realmente vencendo) e
+   `useSessionExpiryRedirect` reage da mesma forma.
+
+Em QUALQUER um dos três casos, a reação é idêntica:
+`adoptExpiredSession(queryClient)` (equivalente a logout — ver §9.4) e
+depois `router.invalidate()`. `invalidate()` força o `beforeLoad` da rota
+ATUAL a rodar de novo; como a sessão já está `null` no cache,
+`requireAuth` relança o `redirect` para `/login` com `location.href` da
+própria URL em que o usuário estava — isto é o que preserva o contexto
+para retomada sem precisar manter uma lista paralela de "quais rotas são
+privadas" dentro do hook de expiração: essa decisão mora inteiramente em
+`requireAuth`, reaproveitada por todos os três caminhos.
+
+As três rotas foram validadas manualmente (Playwright ad hoc, não
+versionado — isso é a Fase 10): expiração detectada em navegação dura,
+em navegação SPA dentro da janela de `staleTime`, e passivamente após o
+`refetchInterval`, nos três casos preservando `search.redirect` igual ao
+destino original.
+
+### 9.4 Logout e troca de usuário — isolamento de cache e subscriptions
+
+Critério eliminatório da seção 11: "Nenhuma exposição de dados entre
+usuários (cache/subscriptions limpos no logout/troca)."
+
+- `src/features/account/hooks/useSessionQuery.ts#adoptSession()` é o ÚNICO
+  ponto que decide uma sessão nova (login, cadastro, logout, ou expiração
+  via `adoptExpiredSession`). Ele SEMPRE: (1) desconecta o socket da sessão
+  anterior (`disconnectSessionSocket`, §9.5); (2) escreve a nova sessão
+  (`Session` ou `null`) diretamente no cache; (3) remove TODO o resto do
+  cache (`removeQueries` com um `predicate` que exclui só a própria key da
+  sessão) — favoritos, carrinho, perfil, carteiras, pedidos de uma sessão
+  anterior nunca sobrevivem a um login/logout subsequente, mesmo que o
+  chamador não tenha clicado explicitamente em "Sair" antes de logar como
+  outra pessoa.
+- **Desvio registrado em relação à política original da Fase 0 (§4.5)**:
+  o documento da Fase 0 descrevia `queryClient.clear()` como o mecanismo de
+  limpeza no logout/troca. Verificado manualmente nesta entrega: chamar
+  `queryClient.clear()` de dentro do `onSuccess` da própria mutation de
+  login/cadastro/logout remove e recria a entrada de cache da sessão por
+  baixo do `QueryObserver` já ativo (`SiteHeader`, `useSessionExpiryRedirect`)
+  — o header ficava "preso" mostrando o estado anterior (ex.: ainda
+  deslogado após um login bem-sucedido, ou ainda a sessão antiga após
+  trocar de usuário) até um refresh completo da página, mesmo com a
+  resposta HTTP e o `GET /session` subsequentes corretos no backend
+  simulado. A correção adotada — `setQueryData` da sessão primeiro, depois
+  `removeQueries` excluindo a key da sessão — preserva EXATAMENTE a mesma
+  garantia de isolamento (zero dado privado de outra sessão sobrevive),
+  só evitando destruir e recriar a entrada que o observer ativo já está
+  olhando. Validado manualmente ponta a ponta (login → logout → login como
+  outro usuário → confirma ausência de qualquer dado do usuário anterior em
+  `/account/profile` e `/account/wallets`, nos dois sentidos A→B e
+  considerando que B tem menos dados que A, o que tornaria qualquer
+  vazamento visualmente óbvio).
+- `useLogoutMutation` chama `sessionApi.logout()` (invalida `db.session` no
+  backend simulado) e então `adoptSession(queryClient, null)`.
+
+### 9.5 Subscriptions Socket.IO da sessão anterior
+
+A conexão/reconciliação real do socket (listeners de `nft.updated`/
+`order.updated`, tolerância a duplicata/evento antigo) é escopo da Fase 6
+(`agent-realtime`, ainda não implementada — `createRealtimeSocket()`
+continua só fabricando um client desconectado, como na Fase 0). Esta fase
+entrega a METADE que é responsabilidade de sessão, antecipando o contrato
+que a Fase 6 deve respeitar:
+
+- `src/features/realtime/client/session-socket.ts#getSessionSocket()`/
+  `disconnectSessionSocket()` encapsulam um socket ÚNICO atrelado ao ciclo
+  de vida da sessão (não ao ciclo de vida de um componente). `agent-realtime`
+  deve obter a conexão por `getSessionSocket()` (nunca chamando
+  `createRealtimeSocket()` diretamente fora deste módulo) para que a mesma
+  instância seja a que `adoptSession()`/`useSessionExpiryRedirect` desconectam.
+- `disconnectSessionSocket()` chama `removeAllListeners()` + `disconnect()`
+  e descarta a instância — a próxima `getSessionSocket()` (próxima sessão)
+  cria uma conexão nova, sem nenhum listener herdado. É chamado em TODOS os
+  pontos de troca de sessão: login, cadastro, logout e expiração (via
+  `adoptSession`/`adoptExpiredSession`).
+- Hoje isto é, na prática, um no-op observável (nenhum componente chama
+  `.connect()`/`.on(...)` ainda), mas fecha o contrato que a Fase 6 precisa
+  seguir para que "eventos de uma sessão anterior nunca atualizem dados de
+  outro usuário" (readme §7) seja garantido pela MESMA peça de código que já
+  prova (nesta fase) que o cache privado é isolado na troca de usuário.
+
+### 9.6 Senha fictícia, nunca em claro
+
+Sem alteração em relação à Fase 2 (§8.4): `utils/password.ts` do mock já
+fazia hash (nunca texto puro) desde a Task 2.1; esta fase só garante que o
+cliente nunca envia nem guarda a senha fora do corpo único do POST de
+login/cadastro (não há `console.log`, não há persistência local de
+senha/token — a única coisa persistida no cliente é o cache do TanStack
+Query, que não inclui a senha em nenhum contrato de resposta).
+
+### 9.7 Arquivos removidos
+
+`src/shared/session/mockSession.ts` e `useMockSession.ts` (sessão de
+brinquedo em `localStorage` da Fase 1, documentada como provisória desde a
+criação) foram removidos — nenhum import deles sobrevive em `src/**`.
+`src/shared/session/safeRedirect.ts` foi mantido sem alterações (já não
+dependia do mock).

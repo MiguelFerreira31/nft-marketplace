@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import type { ApiErrorResponse } from '@/shared/types'
 import { isApiErrorResponse } from '@/shared/types'
+import { notifySessionExpired } from '@/shared/session/session-expiry'
 
 /**
  * Timeout padrão (ms) de toda requisição. Sem isto, uma resposta que nunca
@@ -50,14 +51,28 @@ export function getApiErrorBody(error: unknown) {
 }
 
 /**
- * Interceptor central de resposta: hoje só garante que falhas de rede (sem
- * `error.response`, ex.: conexão indisponível simulada pelo MSW) continuem
- * rejeitando a Promise sem mascarar o erro. Tratamento de `INVALID_SESSION`
- * (redirecionar para login preservando o fluxo) é implementado pelo
- * `agent-auth` na Fase 3, reaproveitando `getApiErrorBody`/`isApiError`
- * acima — não há "any" nem lógica de negócio escondida aqui.
+ * Interceptor central de resposta. Dois efeitos, nenhum deles decide
+ * NEGÓCIO (isso fica nos hooks/componentes que consomem o erro rejeitado):
+ *
+ * 1. Falhas de rede (sem `error.response`, ex.: conexão indisponível
+ *    simulada pelo MSW) seguem rejeitando a Promise sem mascarar o erro.
+ * 2. Qualquer resposta 401 `INVALID_SESSION` (de QUALQUER recurso
+ *    autenticado — perfil, carteiras, carrinho, pedidos, não só
+ *    `/session`) notifica `shared/session/session-expiry.ts`, que é quem
+ *    decide limpar cache/subscriptions e redirecionar para `/login`
+ *    preservando o destino (seção 3: "Trate expiração durante a navegação
+ *    e durante o checkout, preservando o contexto para retomada"). A
+ *    Promise original continua sendo rejeitada normalmente — quem chamou a
+ *    mutation/query ainda recebe o erro para seu próprio tratamento local,
+ *    se precisar.
  */
 http.interceptors.response.use(
   (response) => response,
-  (error: unknown) => Promise.reject(error),
+  (error: unknown) => {
+    const body = getApiErrorBody(error)
+    if (body?.code === 'INVALID_SESSION') {
+      notifySessionExpired({ requestUrl: isApiError(error) ? error.config?.url : undefined })
+    }
+    return Promise.reject(error)
+  },
 )
