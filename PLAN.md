@@ -1,6 +1,6 @@
 # Plano de Ação — NFT Marketplace (Desafio Frontend)
 
-Baseado em `readme.md`. Organiza o trabalho em fases → tasks → subtasks, com um
+Baseado em `DESAFIO.md`. Organiza o trabalho em fases → tasks → subtasks, com um
 agente executor e um (ou mais) subagente validador por task. Nenhuma task é
 considerada "feita" sem passar pelo seu validador.
 

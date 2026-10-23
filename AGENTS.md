@@ -1,14 +1,14 @@
 # Agentes do projeto — NFT Marketplace
 
 Este arquivo é o índice de contexto persistente para quem (humano ou IA)
-orquestra as fases do desafio descrito em `readme.md` e detalhado em
+orquestra as fases do desafio descrito em `DESAFIO.md` e detalhado em
 `PLAN.md`. Leia os dois antes de invocar qualquer agente — eles não são
 repetidos aqui.
 
 As definições reais dos agentes (as que o Claude Code carrega como
 `subagent_type` selecionável via `Agent`) ficam em `.claude/agents/*.md`,
 escopadas a este projeto. Cada arquivo já embute o recorte de `PLAN.md` e
-`readme.md` relevante para aquele papel, então invocar pelo nome evita
+`DESAFIO.md` relevante para aquele papel, então invocar pelo nome evita
 reexplicar contexto a cada chamada — essa é a "forma otimizada de consumo":
 chame pelo `subagent_type`, não copie trechos do plano na prompt.
 
@@ -72,7 +72,7 @@ skill equivalente pronta.
    acima — eles têm `tools` e `model` já calibrados para o papel.
 6. **Feche o Checklist eliminatório final do `PLAN.md`** (seção final do
    plano) antes de considerar o desafio pronto — ele reúne os critérios
-   eliminatórios da seção 11 do `readme.md`.
+   eliminatórios da seção 11 do `DESAFIO.md`.
 
 ## Instalação local (dentro de `.claude/` deste projeto)
 

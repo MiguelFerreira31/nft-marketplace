@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "buildCommand": "VITE_ENABLE_MOCKS=true npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
