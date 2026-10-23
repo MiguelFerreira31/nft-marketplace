@@ -1342,6 +1342,15 @@ excesso e desabilita o botão de checkout. `npm run typecheck`, `npm run lint`
 e `npm run build` passaram. A reconciliação imediata por Socket.IO e o
 cenário completo de alteração durante checkout ficam para a Fase 6.
 
+**Correção pós-gate:** esta fase foi implementada por um processo externo
+não supervisionado (Copilot CLI) e revalidada retroativamente com
+ceticismo extra por `val-code-review`. Único achado (MÉDIO, não bloqueante):
+o comentário de `mergeGuestCartInto` (`src/features/mocks/handlers/session.ts`)
+descrevia o merge como "limitado ao estoque atual", contradizendo o código
+real (que soma a quantidade por completo e deixa a UI sinalizar o excesso —
+comportamento correto exigido pelo requisito de nunca descartar quantidade
+em silêncio). Comentário corrigido para refletir o comportamento real.
+
 ## 12. Tempo real e reconciliação REST (Fase 6 — Tasks 6.1/6.2)
 
 ### 12.1 Cliente e ciclo de vida da sessão
@@ -1409,6 +1418,26 @@ o construtor global `WebSocket` ao ser avaliado; importar a árvore de rotas
 antes da instalação do interceptor MSW faria o `socket.io-client` real abrir
 conexões nativas fora do binding mock. O adiamento mantém o contrato de
 transporte real, preservando o mesmo `getSessionSocket()` e os handlers MSW.
+
+### 12.6 Correção pós-gate
+
+Esta fase foi implementada por um processo externo não supervisionado
+(Copilot CLI) e revalidada retroativamente com ceticismo extra por
+`val-realtime-qa` e `val-manual-qa`. Toda a lógica central (duplicata,
+evento antigo, reconciliação pós-reconexão, isolamento entre sessões,
+liberação de listeners, bloqueio de checkout com cotação velha) foi
+confirmada por execução real — nenhum achado crítico/alto. Porém
+`tests/e2e/realtime.spec.ts` estava quebrado (2/2 testes falhando em
+desktop e mobile): a Fase 7 reescreveu o texto da UI de `checkout.tsx`
+("Você aceitou a cotação {N}...", "O preço ou a disponibilidade do
+carrinho mudou...") e de `orders.$orderId.tsx` sem atualizar as asserções
+que a própria Fase 6 havia escrito, e ninguém re-executou a suíte depois
+disso — a alegação de "Playwright 8 cenários validado" do commit original
+era falsa no HEAD resultante. Corrigidas as duas asserções de texto
+desatualizadas (uma delas, `versão {N}`, referenciava um texto que nunca
+existiu na página do pedido — removida, pois a verificação real de
+não-regressão já está coberta pela assertiva de status na linha seguinte).
+Suíte 100% verde (4/4, desktop+mobile) após a correção.
 
 `useRealtimeSync` também adia `socket.connect()` por uma microtask cancelável.
 Assim, o ciclo setup/cleanup extra do `StrictMode` não inicia uma conexão que
@@ -1480,6 +1509,23 @@ pedidos pendentes com chaves distintas, rejeição de carrinho alheio e validaç
 da rede da carteira. A suíte passou em Chromium desktop e mobile (9 testes por
 perfil), incluindo o timeout de 15 s do MSW recuperado com a mesma chave e
 payload.
+
+### 13.4 Correção pós-gate
+
+Esta fase foi implementada por um processo externo não supervisionado
+(Copilot CLI) e revalidada retroativamente com ceticismo extra por dois
+`val-code-review` independentes e `val-manual-qa` — foco no critério
+eliminatório "compra confirmada sem resposta da simulação" (seção 11 do
+readme). Nenhum achado crítico ou alto: a chave de idempotência é gerada
+uma única vez por tentativa e persistida (`checkout-attempt.ts`), duplo
+clique real não cria pedido duplicado, timeout+reenvio com a mesma chave
+recupera o mesmo pedido, chave reaproveitada com payload diferente gera
+409, e a UI é estruturalmente incapaz de mostrar "confirmado" antes de uma
+resposta real da simulação (o cache só é escrito a partir do REST, nunca do
+payload do evento Socket.IO). `tests/e2e/checkout.spec.ts` confirmado 18/18
+em execução independente (uma instabilidade inicial com `trace` habilitado
+era do Playwright gravando artefatos numa pasta sincronizada por OneDrive
+neste ambiente Windows, não da aplicação — resolvida com `--trace=off`).
 
 ## 14. Perfil e carteiras (Fase 8 — Tasks 8.1/8.2)
 

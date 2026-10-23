@@ -33,10 +33,13 @@ function toSession(user: MockUserRecord, expiresAt: string): Session {
  * Mescla o carrinho de visitante (`db.guestCart`) no carrinho do usuário que
  * acabou de autenticar (seção 3: "preservar os itens do visitante ao
  * autenticar"). Itens cuja edição já exista no carrinho do usuário somam
- * quantidades (limitadas ao estoque atual); os demais são adicionados. O
- * carrinho de visitante é esvaziado ao final. Usado tanto por login quanto
- * por cadastro (um cadastro bem-sucedido também autentica — ver
- * `RegisterResponse = Session`).
+ * quantidades por completo — sem limitar ao estoque atual, para nunca
+ * descartar quantidade em silêncio; se a soma exceder `availableQuantity`,
+ * a UI do carrinho sinaliza o excesso e bloqueia o checkout até o usuário
+ * ajustar (ver `ARCHITECTURE.md` §11). Os demais itens são adicionados sem
+ * alteração. O carrinho de visitante é esvaziado ao final. Usado tanto por
+ * login quanto por cadastro (um cadastro bem-sucedido também autentica —
+ * ver `RegisterResponse = Session`).
  */
 function mergeGuestCartInto(db: MockDb, user: MockUserRecord): void {
   if (db.guestCart.items.length === 0) return

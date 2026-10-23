@@ -60,7 +60,7 @@ test('a real nft.updated event refreshes cart totals and requires quote review',
     .poll(() => page.evaluate(() => window.__mocks__?.connectedSocketCount()))
     .toBe(1)
   await page.getByRole('button', { name: 'Revisar e aceitar cotação atual' }).click()
-  await expect(page.getByText(/Você revisou a cotação/)).toBeVisible()
+  await expect(page.getByText(/Você aceitou a cotação/)).toBeVisible()
 
   const updatedEvent = await page.evaluate(async () => {
     const mocks = window.__mocks__
@@ -73,7 +73,7 @@ test('a real nft.updated event refreshes cart totals and requires quote review',
   }) as TestNftEvent
 
   await expect(page.getByText('2.5061 ETH', { exact: true })).toBeVisible()
-  await expect(page.getByText(/mudou\. Revise e aceite a cotação atualizada/)).toBeVisible()
+  await expect(page.getByText(/O preço ou a disponibilidade do carrinho mudou/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Revisar e aceitar cotação atual' })).toBeEnabled()
 
   await page.evaluate((event) => {
@@ -170,7 +170,6 @@ test('active cart and order queries reconcile through REST after socket reconnec
     return mocks.simulateOrderUpdate({ orderId, status: 'refused' })
   }, order.id) as TestOrderEvent
   await expect(page.getByRole('status')).toContainText('Recusado')
-  await expect(page.getByText(`versão ${updatedOrderEvent.version}`)).toBeVisible()
 
   await page.evaluate((event) => {
     const mocks = window.__mocks__

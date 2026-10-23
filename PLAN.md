@@ -219,12 +219,12 @@ Agente: `agent-catalog` · Validador: `val-manual-qa`
 ### Task 5.1 — Itens, cupom e totais
 Agente: `agent-cart` · Validador: `val-code-review`
 
-- [ ] Adicionar/alterar/remover respeitando disponibilidade por NFT/edição.
-- [ ] Persistência após refresh; itens de visitante preservados ao autenticar.
-- [ ] Cupom aplicado/removido com tratamento de inválido/expirado.
-- [ ] Subtotal, desconto, taxa de rede, total coerentes com a API; ETH como
+- [x] Adicionar/alterar/remover respeitando disponibilidade por NFT/edição.
+- [x] Persistência após refresh; itens de visitante preservados ao autenticar.
+- [x] Cupom aplicado/removido com tratamento de inválido/expirado.
+- [x] Subtotal, desconto, taxa de rede, total coerentes com a API; ETH como
       string decimal sem perda de precisão; quantidades inteiras.
-- [ ] Reflete mudanças de preço/disponibilidade recebidas com o carrinho aberto.
+- [x] Reflete mudanças de preço/disponibilidade recebidas com o carrinho aberto.
 
 **Gate:** `val-code-review` audita cálculos de totais linha a linha contra os
 valores retornados pela API (nunca recalculados localmente de forma
@@ -237,14 +237,14 @@ divergente).
 ### Task 6.1 — Cliente e reconciliação
 Agente: `agent-realtime` · Validador: `val-realtime-qa`
 
-- [ ] Consumir `nft.updated` e `order.updated` via `socket.io-client`,
+- [x] Consumir `nft.updated` e `order.updated` via `socket.io-client`,
       atualizando catálogo/detalhe/carrinho/pedido.
-- [ ] Eventos com identidade estável, recurso e versão; tolerância a
+- [x] Eventos com identidade estável, recurso e versão; tolerância a
       duplicatas e eventos antigos (sem regressão de estado nem reaplicação de
       efeito).
-- [ ] Reconciliação com REST após reconexão.
-- [ ] Eventos de sessão anterior nunca atualizam dados de outro usuário.
-- [ ] Listeners/subscriptions liberados ao fim do ciclo de vida do componente.
+- [x] Reconciliação com REST após reconexão.
+- [x] Eventos de sessão anterior nunca atualizam dados de outro usuário.
+- [x] Listeners/subscriptions liberados ao fim do ciclo de vida do componente.
 
 **Gate:** `val-realtime-qa` injeta evento duplicado e evento "antigo"
 (versão menor) manualmente e confirma que o estado final não regride.
@@ -252,9 +252,9 @@ Agente: `agent-realtime` · Validador: `val-realtime-qa`
 ### Task 6.2 — Cenário obrigatório de preço/disponibilidade no carrinho
 Agente: `agent-realtime` + `agent-cart` · Validador: `val-manual-qa`
 
-- [ ] NFT no carrinho sofre mudança de preço/disponibilidade durante a
+- [x] NFT no carrinho sofre mudança de preço/disponibilidade durante a
       navegação → UI informa e atualiza o resumo.
-- [ ] Checkout impede confirmação com cotação desatualizada, exigindo nova
+- [x] Checkout impede confirmação com cotação desatualizada, exigindo nova
       confirmação do usuário.
 
 **Gate:** `val-manual-qa` reproduz o roteiro dos 4 passos da seção 7
@@ -278,13 +278,13 @@ Agente: `agent-checkout` · Validador: `val-code-review`
 > revisada, revalidar com a API antes do POST e voltar a exigir revisão se
 > houver conflito — nunca confirmar com uma cotação diferente da aceita.
 
-- [ ] Dados do colecionador, seleção de carteira/rede, simulação de conexão,
+- [x] Dados do colecionador, seleção de carteira/rede, simulação de conexão,
       recusa e desconexão.
-- [ ] Revalidação de preço, disponibilidade, cupom e taxas antes de confirmar;
+- [x] Revalidação de preço, disponibilidade, cupom e taxas antes de confirmar;
       mudança exige nova confirmação.
-- [ ] Prevenção de pedido duplicado (clique repetido / reenvio após timeout)
+- [x] Prevenção de pedido duplicado (clique repetido / reenvio após timeout)
       via chave de idempotência.
-- [ ] Estados pendente/confirmado/recusado recuperáveis após refresh/reconexão;
+- [x] Estados pendente/confirmado/recusado recuperáveis após refresh/reconexão;
       confirmado/recusado são terminais.
 
 **Gate:** `val-code-review` confirma uso real da chave de idempotência (mesma
@@ -295,10 +295,10 @@ simulação" depende disso.
 ### Task 7.2 — Confirmação e recibo
 Agente: `agent-checkout` · Validador: `val-manual-qa`
 
-- [ ] Confirmação exibida só para pedido efetivamente confirmado na simulação.
-- [ ] Falhas preservam itens; confirmação remove do carrinho apenas o que foi
+- [x] Confirmação exibida só para pedido efetivamente confirmado na simulação.
+- [x] Falhas preservam itens; confirmação remove do carrinho apenas o que foi
       comprado.
-- [ ] Recibo reproduz snapshot do pedido, imune a mudanças futuras do catálogo.
+- [x] Recibo reproduz snapshot do pedido, imune a mudanças futuras do catálogo.
 
 **Gate:** `val-manual-qa` altera preço do NFT após confirmar pedido e verifica
 que o recibo não muda.
