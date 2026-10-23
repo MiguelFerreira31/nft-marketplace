@@ -125,6 +125,16 @@ function CartPage() {
   )
 }
 
+/**
+ * `Button asChild` renderiza um `<Link>` (âncora) por baixo — `disabled` no
+ * `<button>` normal não tem efeito nativo num elemento `<a>`, então o botão
+ * teria aparência desabilitada mas continuaria navegável. Quando ainda não
+ * se pode prosseguir (cotação carregando/com erro, ou item sem
+ * disponibilidade suficiente), renderiza um `<button>` de verdade
+ * desabilitado em vez do link — bloqueio real, não só visual (readme §7:
+ * "o checkout impede a confirmação com uma cotação desatualizada" já
+ * antecipado aqui para a cotação em si).
+ */
 function CheckoutCta({ canProceed }: { canProceed: boolean }) {
   if (!canProceed) {
     return (

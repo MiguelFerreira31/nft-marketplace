@@ -12,6 +12,11 @@ interface CatalogErrorStateProps {
  * Estado de falha do catálogo (readme §3/§4: "tratamento de... falhas").
  * Cobre tanto erro HTTP 4xx/5xx simulado quanto falha de conexão (sem
  * `response`, ex.: `networkDown` do painel de controle do mock).
+ *
+ * Reaproveitado fora do catálogo (ex.: `/cart`, Fase 5) via o `title`
+ * customizável — mesmo padrão visual para qualquer estado de erro de
+ * carregamento (readme §1: "Estados não desenhados devem seguir o mesmo
+ * padrão visual"), evitando duplicar o mesmo bloco de UI por feature.
  */
 export function CatalogErrorState({ error, onRetry, title = 'Não foi possível carregar o catálogo' }: CatalogErrorStateProps) {
   return (
