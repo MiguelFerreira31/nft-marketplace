@@ -2089,3 +2089,36 @@ O 1 teste "skipped" é `a11y-forms.spec.ts` › "the mobile navigation
 disclosure..." no projeto `chromium-desktop` — pulado deliberadamente
 (`test.skip` por largura de viewport ≥768px), não uma falha; o mesmo teste
 roda e passa no projeto `chromium-mobile`.
+
+## 17. Performance e Lighthouse (Fase 11)
+
+Build otimizado (`VITE_ENABLE_MOCKS=true npm run build`) + `vite preview`,
+cenário padrão dos mocks, 3 medições por página/perfil via `npx lhci
+autorun` (mobile, preset default) e `npx lhci autorun
+--collect.settings.preset=desktop`. Mediana de cada categoria:
+
+| Página | Perfil | Performance | Accessibility | Best Practices | SEO | LCP | CLS | TBT |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Início | mobile | 0.92 | 1.00 | 1.00 | 1.00 | 3061 ms | 0.0011 | 56 ms |
+| Início | desktop | 0.99 | 1.00 | 1.00 | 1.00 | 904 ms | 0.0020 | 0 ms |
+| Detalhe do NFT | mobile | 0.93 | 0.96 | 1.00 | 1.00 | 3005 ms | 0.0000 | 26 ms |
+| Detalhe do NFT | desktop | 0.99 | 0.96 | 1.00 | 1.00 | 809 ms | 0.00003 | 0 ms |
+
+Todas as 4 categorias ≥ meta da seção 10 do DESAFIO.md (Performance ≥90,
+Accessibility ≥95, Best Practices ≥95, SEO ≥90) nos dois perfis —
+`lighthouserc.cjs` tem as assertions em nível `error` (não mais `warn`).
+
+**Achado corrigido:** SEO estava em 0.82/0.83 (abaixo da meta) na primeira
+medição, por dois audits reais: `meta-description` (`index.html` não tinha
+`<meta name="description">`) e `robots-txt` (inexistente — o catch-all de
+SPA do `vercel.json` devolveria o próprio `index.html` em `/robots.txt`,
+reprovando o audit de "robots.txt válido"). Corrigido com a meta tag e um
+`public/robots.txt` (`User-agent: * / Allow: /`) — ambos arquivos reais,
+servidos antes do rewrite de SPA (mesma precedência de qualquer asset
+estático). Reexecutado após a correção: SEO 1.00 nas duas páginas e nos
+dois perfis.
+
+Nenhuma métrica ficou abaixo da meta após a correção — não há simplificação
+exclusiva para a auditoria; o build audita as mesmas imagens/fontes/mocks
+da entrega real. Relatórios completos (HTML/JSON) versionados em
+`.lighthouseci/`.

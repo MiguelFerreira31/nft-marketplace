@@ -24,8 +24,6 @@ dist-ssr
 /blob-report/
 /playwright/.cache/
 
-# Lighthouse CI
-.lighthouseci/
 
 # TanStack Router plugin cache
 .tanstack/

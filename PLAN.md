@@ -427,15 +427,20 @@ eliminatório "ausência de testes E2E executáveis").
 
 Agente: `agent-quality` · Validador: `val-perf`
 
-- [ ] Build otimizado + cenário padrão dos mocks para a auditoria.
-- [ ] 3 medições por página (Início, Detalhe) × perfil (mobile, desktop);
-      reportar mediana por categoria.
-- [ ] Metas: Performance ≥90, Accessibility ≥95, Best Practices ≥95, SEO ≥90.
-- [ ] Registrar LCP, CLS, TBT; justificar qualquer resultado abaixo da meta.
-- [ ] Versionar configuração da auditoria + relatórios HTML/JSON + versões de
-      ferramentas/ambiente/condições de execução.
-- [ ] Garantir que a auditoria carrega imagens/fontes/funcionalidades reais
-      (sem simplificação só para pontuação — critério eliminatório indireto).
+- [x] Build otimizado + cenário padrão dos mocks para a auditoria.
+- [x] 3 medições por página (Início, Detalhe) × perfil (mobile, desktop);
+      reportar mediana por categoria — ver `ARCHITECTURE.md` seção 17.
+- [x] Metas: Performance ≥90, Accessibility ≥95, Best Practices ≥95, SEO ≥90
+      — todas atingidas nos dois perfis após corrigir SEO (meta description +
+      robots.txt).
+- [x] Registrar LCP, CLS, TBT — ver tabela em `ARCHITECTURE.md` §17. Nenhum
+      resultado ficou abaixo da meta após a correção, nada a justificar.
+- [x] Versionar configuração (`lighthouserc.cjs`) + relatórios HTML/JSON
+      (`.lighthouseci/`) + versões: Lighthouse CI 0.15.1, Node v24.15.0,
+      Chrome headless (via `lhci`), Windows 11, build de produção local
+      servido por `vite preview`.
+- [x] Auditoria carrega imagens/fontes/funcionalidades reais (mocks
+      habilitados, mesmo build da entrega) — sem simplificação.
 
 **Gate:** `val-perf` roda `lighthouse` 3x por página/perfil de forma
 independente e confere que os números batem com o relatório entregue.

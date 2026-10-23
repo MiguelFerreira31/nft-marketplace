@@ -1,34 +1,28 @@
 /**
- * Configuração do Lighthouse CI (seção 10 do readme.md).
+ * Configuração do Lighthouse CI (seção 10 do DESAFIO.md, Fase 11).
  *
- * Nesta fase (0 — fundação) só existe a rota "/" com um placeholder; as
- * páginas reais a auditar ("Início" e "Detalhe do NFT") só existem a partir
- * das Fases 1 e 4. Por isso as assertions abaixo usam nível `warn`, não
- * `error` — o objetivo aqui é garantir que `npm run lighthouse` executa de
- * ponta a ponta (build otimizado → preview → 3 medições → relatório) a
- * partir de um checkout limpo. `agent-quality` (Fase 11, PLAN.md) deve:
- *
- * 1. Atualizar `collect.url` para as rotas reais de Início e Detalhe (hoje
- *    só "/" existe).
- * 2. Trocar os `assert` de `warn` para `error` nos 4 limites da seção 10
- *    (Performance ≥90, Accessibility ≥95, Best Practices ≥95, SEO ≥90).
- * 3. Versionar os relatórios HTML/JSON gerados em `.lighthouseci/` junto da
- *    justificativa de qualquer resultado abaixo da meta (LCP/CLS/TBT).
+ * Audita Início ("/") e Detalhe do NFT ("/nfts/nft-music-1"), build
+ * otimizado + cenário padrão dos mocks (VITE_ENABLE_MOCKS=true), 3 medições
+ * por página. Perfil mobile é o preset default do Lighthouse CLI; o perfil
+ * desktop é rodado separadamente via
+ * `npx lhci autorun --collect.settings.preset=desktop` (ver ARCHITECTURE.md
+ * seção 17 para os dois conjuntos de resultados e a justificativa de
+ * qualquer métrica abaixo da meta).
  */
 module.exports = {
   ci: {
     collect: {
-      url: ['http://localhost:4173/'],
+      url: ['http://localhost:4173/', 'http://localhost:4173/nfts/nft-music-1'],
       startServerCommand: 'npm run preview -- --port 4173',
       startServerReadyPattern: 'Local:',
       numberOfRuns: 3,
     },
     assert: {
       assertions: {
-        'categories:performance': ['warn', { minScore: 0.9 }],
-        'categories:accessibility': ['warn', { minScore: 0.95 }],
-        'categories:best-practices': ['warn', { minScore: 0.95 }],
-        'categories:seo': ['warn', { minScore: 0.9 }],
+        'categories:performance': ['error', { minScore: 0.9 }],
+        'categories:accessibility': ['error', { minScore: 0.95 }],
+        'categories:best-practices': ['error', { minScore: 0.95 }],
+        'categories:seo': ['error', { minScore: 0.9 }],
       },
     },
     upload: {

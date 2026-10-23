@@ -1,0 +1,74 @@
+[
+  {
+    "url": "http://localhost:4173/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_29_39.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_29_39.report.json",
+    "summary": {
+      "performance": 0.88,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:4173/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_30_13.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_30_13.report.json",
+    "summary": {
+      "performance": 0.92,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:4173/nfts/nft-music-1",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_28.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_28.report.json",
+    "summary": {
+      "performance": 0.92,
+      "accessibility": 0.96,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:4173/nfts/nft-music-1",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_42.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_42.report.json",
+    "summary": {
+      "performance": 0.93,
+      "accessibility": 0.96,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:4173/",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_29_57.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost--2026_10_23_22_29_57.report.json",
+    "summary": {
+      "performance": 0.86,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:4173/nfts/nft-music-1",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_57.report.html",
+    "jsonPath": "C:\\Users\\Miguel\\Pictures\\desafio\\.lighthouseci\\localhost-nfts_nft_music_1-2026_10_23_22_30_57.report.json",
+    "summary": {
+      "performance": 0.93,
+      "accessibility": 0.96,
+      "best-practices": 1,
+      "seo": 1
+    }
+  }
+]
