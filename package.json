@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "oxlint",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "lighthouse": "lhci autorun"
   },
@@ -44,7 +46,8 @@
     "shadcn": "^4.22.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "msw": {
     "workerDirectory": [

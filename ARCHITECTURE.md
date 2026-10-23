@@ -1846,3 +1846,246 @@ Diff desta fase ficou restrito a 8 arquivos: `src/index.css`,
 `src/features/catalog/components/{catalog-toolbar,nft-card,nft-gallery,
 quantity-stepper}.tsx` e `src/routes/checkout.tsx` — nenhum contrato REST/
 evento, hook de estado ou lógica de negócio foi tocado.
+
+## 16. Testes — Fase 10 (`agent-tests`)
+
+Escopo ampliado pelo orquestrador além do `PLAN.md`: além dos 12 cenários
+E2E do readme §9 (Playwright, já previstos na Fase 10), esta fase também
+introduz **testes unitários** (Vitest), que até aqui não existiam — toda a
+cobertura de lógica de negócio pura vinha indiretamente dos specs E2E.
+
+### 16.1 Testes unitários (Vitest) — novo
+
+**Por que Vitest**: integra nativamente com a config do Vite já usada no
+projeto (mesmo resolvedor de módulos/alias `@`), sem exigir um segundo
+bundler/transformador de TS. `vitest.config.ts` (raiz) é deliberadamente
+mínimo — só repete o alias `@` → `src` e roda em `environment: 'node'` (sem
+jsdom): nenhum arquivo `*.test.ts` importa React ou toca o DOM.
+
+**Por que estes arquivos e não outros**: o critério foi "lógica de negócio
+pura, hoje sem nenhuma cobertura direta" — funções sem dependência de
+rede/DOM, mas com regras reais (cálculo, parsing, validação, mapeamento de
+erro). Componentes React e hooks que dependem de rede (`useQuery`/
+`useMutation`) ou de um browser real continuam cobertos apenas pelos specs
+Playwright (seção 16.2) — duplicar essa cobertura em Vitest com mocks de
+Axios/Query só adicionaria manutenção sem aumentar a confiança real.
+
+| Arquivo testado | Teste (`*.test.ts` ao lado do arquivo) | O que valida |
+| --- | --- | --- |
+| `features/mocks/utils/decimal.ts` | `decimal.test.ts` (19 casos) | Aritmética `bigint` de `EthAmount`: round-trip sem erro de float binário (`0.1+0.2==="0.3"`), truncamento (não arredondamento) além de 18 casas decimais, sinal/zero negativo, `applyPercent` com percentual fracionário |
+| `features/mocks/utils/quote.ts` | `quote.test.ts` (10 casos) | `computeQuote`: subtotal/desconto/taxa de rede/total a partir de `CartItem[]`, `quoteVersion` estável entre leituras iguais e incrementando só quando o fingerprint muda (preço/quantidade/cupom); `findCartById` (guest vs. usuário vs. não encontrado) |
+| `features/mocks/utils/password.ts` | `password.test.ts` (6 casos) | Hash determinístico, nunca igual ao texto puro, `verifyPassword` correto/incorreto, sensível a maiúsculas/espaço |
+| `features/mocks/utils/nft-query.ts` | `nft-query.test.ts` (14 casos) | `queryNfts`: busca por título/coleção/criador, filtro de categoria + faixa de preço combinados, as 3 chaves de ordenação, paginação (incl. `page`/`pageSize` inválidos clampados a 1) e `totalPages` sobre o conjunto FILTRADO; `toSummary` remove campos de detalhe e só anexa `isFavorited` com sessão |
+| `features/mocks/utils/http-error.ts` | `http-error.test.ts` (10 casos) | As 6 fábricas de erro (status/body corretos) e `toHttpResponse` — incluindo o fallback 500 `TRANSIENT_ERROR` para um erro de programação não esperado |
+| `shared/session/safeRedirect.ts` | `safeRedirect.test.ts` (8 casos) | Proteção contra open-redirect: aceita só caminho interno (`/algo[?query]`), rejeita `//host`, `https://host` e string sem `/` inicial |
+| `shared/api/idempotency.ts` | `idempotency.test.ts` (2 casos) | `createIdempotencyKey` gera UUID válido e nunca repete entre chamadas |
+| `features/account/lib/form-errors.ts` | `form-errors.test.ts` (8 casos) | `mapAuthError`/`mapAccountError`: `VALIDATION_ERROR` → `fieldErrors` (1ª mensagem por campo) ou `formError` genérico se vazio; `CONFLICT`/`DUPLICATE_EMAIL` → campo `email`; `TRANSIENT_ERROR` → mensagem fixa (exceto em `mapAccountError`, que usa a mensagem real do servidor) |
+| `features/catalog/lib/api-error-message.ts` | `api-error-message.test.ts` (8 casos) | `describeQueryError`: uma mensagem amigável por código de erro (`NOT_FOUND`, `INVALID_SESSION`, `CONFLICT`/`STOCK_UNAVAILABLE` vs. outro motivo, fallback para código desconhecido) |
+
+Total: **85 testes, 9 arquivos**, executados por `npm run test:unit`
+(`vitest run`; `npm run test:unit:watch` para modo interativo). Os testes de
+`form-errors`/`api-error-message` constroem um objeto "parecido com
+`AxiosError`" (`{ isAxiosError: true, response: { data: { error: ... } } }`)
+em vez de mockar o Axios de verdade — é exatamente o shape que
+`axios.isAxiosError`/`isApiErrorResponse` (`shared/api/http.ts`,
+`shared/types/errors.ts`) verificam, sem precisar de uma requisição real.
+
+`tsconfig.app.json` já inclui `src/**` (portanto os `*.test.ts` colocados ao
+lado do código são type-checados por `npm run typecheck`); `tsconfig.node.json`
+ganhou `vitest.config.ts` na lista de `include` pelo mesmo motivo que já
+cobria `vite.config.ts`/`playwright.config.ts`.
+
+### 16.2 Lacunas da suíte E2E preenchidas (readme §9)
+
+9 arquivos novos em `tests/e2e/`, cobrindo os itens que só tinham cobertura
+indireta ou nenhuma. `checkout.spec.ts` (pagamento/idempotência),
+`realtime*.spec.ts` (tempo real) e `account.spec.ts` (perfil/carteiras) já
+existiam e continuam passando sem alteração de lógica — só confirmados (ver
+tabela em 16.4).
+
+- **`catalog-search.spec.ts`** (item 1): busca por título/coleção/criador,
+  estado vazio, 2 categorias combinadas + faixa de preço + ordenação
+  (reinicia para a página 1 a cada mudança de filtro, mesmo vindo da página
+  2), e restauração via `goBack()`/`goForward()`/`reload()` com os filtros e
+  a página intactos. Os cards são escopados a
+  `section[aria-label="Catálogo"] article` porque "Destaques" (`FeaturedNfts`)
+  também renderiza `<article>` com uma consulta fixa independente dos
+  filtros — um detalhe fácil de esquecer que inflava as contagens até ser
+  corrigido aqui.
+- **`nft-detail.spec.ts`** (item 2): acesso direto a um NFT existente; NFT
+  inexistente → 404 **com o `AppShell` (header/footer) preservado** —
+  regressão permanente do bug da Fase 4 documentado em §10.4 (o
+  `notFoundComponent` tem que viver na própria rota `/nfts/$nftId`, não
+  propagar para o da raiz); rota desconhecida → 404 da raiz; e edição
+  esgotada/estoque baixo (`nft-sold-out-demo`/`nft-low-stock-demo`) bloqueando
+  "Adicionar ao carrinho"/o incremento de quantidade.
+- **`auth.spec.ts`** (item 3): conflito de cadastro (e-mail duplicado) e
+  validação client-side; login com senha errada; **os 3 caminhos de
+  expiração de sessão** descritos em `useSessionExpiryRedirect.ts` (ver
+  §9), cada um isolado num teste:
+  1. *Dura*: `sessionForceExpired=true` já ativo, então `page.goto()` (nova
+     carga de documento) direto numa rota privada — `requireAuth` intercepta
+     no `beforeLoad`.
+  2. *SPA via 401*: já numa tela privada carregada, uma mutation (salvar
+     perfil) recebe 401 `INVALID_SESSION` — o interceptor do Axios dispara o
+     redirecionamento sem reload.
+  3. *Passiva*: `page.clock.install()` + `fastForward(31_000)` (sem nenhuma
+     ação do usuário) força o `refetchInterval: 30s` de `useSessionQuery` a
+     disparar enquanto a sessão já está `sessionForceExpired` — detecção
+     "silenciosa" (nenhum request chega a falhar).
+  Mais logout (limpa cache, bloqueia a rota privada de novo). Troca de
+  usuário Ana↔Bruno com isolamento de carrinho/socket já tinha cobertura
+  dedicada em `realtime-session.spec.ts` (Fase 6) — não duplicada aqui.
+- **`favorites.spec.ts`** (item 4): visitante vê link de login (não botão);
+  favoritar/desfavoritar persiste após `reload()`; **falha de mutation com
+  rollback** (força `favorites.add` a 503, confirma que o estado otimista
+  volta a "não favoritado" e a mensagem de rollback aparece) + recuperação
+  no próximo clique; isolamento entre Ana e Bruno (favoritos de um nunca
+  aparecem para o outro).
+- **`cart.spec.ts`** (item 5): adicionar pelo detalhe → aparece no carrinho →
+  sobrevive a `reload()`; limite de estoque (`nft-low-stock-demo`) desabilita
+  o incremento e remover esvazia o carrinho; cupom válido (desconto
+  aplicado/removido com reversão exata do total), inválido (`NOT_FOUND`
+  "coupon") e expirado (`CONFLICT`/`COUPON_UNAVAILABLE`) com mensagens
+  distintas; carrinho de visitante sobrevive a refresh e é mesclado ao
+  carrinho da conta no login (`mergeGuestCartInto`, `handlers/session.ts`).
+- **`purchase-flow.spec.ts`** (item 6): a jornada PONTA A PONTA com uma
+  conta nova — cadastro → cadastro de carteira (sem isso o checkout não
+  tem como prosseguir) → busca no catálogo → detalhe → carrinho → pagamento
+  → recibo confirmado → carrinho vazio. Complementa `checkout.spec.ts`, que
+  audita o pagamento isoladamente a partir de um carrinho já preparado.
+- **`a11y-forms.spec.ts`** (item 11): `Tab` real (não `.focus()`) desde o
+  topo da página até o campo de busca, um filtro de categoria (operado com
+  `Space`) e o link de título do primeiro card (ativado com `Enter`);
+  seletor de quantidade e "Adicionar ao carrinho" operáveis só por teclado no
+  detalhe; o disclosure do menu mobile (alcançável/operável por teclado,
+  sem *trap* — não é modal, ver §15.4) alcançável e navegável só por
+  teclado; validação de login com `aria-invalid`/`aria-describedby`
+  conferidos contra o id real da mensagem de erro (não só a mensagem
+  visível). Foco de diálogo não se aplica — não existe nenhum
+  diálogo/drawer modal no projeto (§15.4), auditoria permanece válida.
+- **`loading-states.spec.ts`** (item 12): skeleton do catálogo/detalhe/
+  carrinho sob latência artificial determinística (`latencyOverridesMs`),
+  com `aria-busy`/`aria-label` confirmados; indisponibilidade de conexão
+  (`networkDown`) e erro 500 forçado (`forceError`) no detalhe, cada um com
+  retry funcional após o cenário ser limpo; cenário vazio (`forceEmpty`) sem
+  a mensagem de "filtro ativo" nem o botão de limpar filtros.
+- **`visual.spec.ts`** (regressão visual, ver 16.3).
+
+### 16.3 Regressão visual
+
+`toHaveScreenshot()` para Início, Detalhe do NFT, Carrinho e Pagamento —
+**8 baselines** versionadas em `tests/e2e/visual.spec.ts-snapshots/`
+(2 viewports × 4 telas; o sufixo do nome do arquivo inclui o projeto
+Playwright e o SO, convenção padrão do Playwright).
+
+Decisões de determinismo (para não gerar flakiness):
+
+- `latencyMs: { minMs: 0, maxMs: 0 }` via painel de mocks antes de cada
+  captura — remove a variação de latência padrão (150-500ms); irrelevante
+  para o resultado final (cada tela só é fotografada depois do CONTEÚDO
+  REAL visível, nunca o skeleton), mas encurta o teste.
+- `page.emulateMedia({ reducedMotion: 'reduce' })` força
+  `prefers-reduced-motion`, que o shimmer dos skeletons e as transições CSS
+  já respeitam (Task 1.2/Fase 9) — nenhuma animação em voo no momento do
+  screenshot.
+- Dados de fixture (NFTs, Ana/Bruno, cupons) e as imagens placeholder (SVG
+  inline determinístico, `fixtures/placeholder-image.ts`, sem
+  `Math.random()`) nunca variam entre execuções; cada teste roda num
+  contexto de browser novo (storage isolado), então o estado de Ana/Bruno
+  está sempre exatamente no ponto de semeadura.
+- **Pagamento é fotografado ANTES de confirmar a compra** (carteira/rede
+  selecionadas, cotação carregada, sem clicar em "Conectar"/"Revisar"/
+  "Confirmar"): o recibo (`/orders/$orderId`) tem id, timestamp e
+  referência de transação gerados por execução — incompatível com uma
+  baseline versionada — por isso a tela de Confirmação não entra na
+  regressão visual (a seção 9 do readme pede "pagamento", não
+  "confirmação").
+- Os botões flutuantes dos devtools do TanStack (Query/Router — só
+  existem com `import.meta.env.DEV`, nunca em produção) são passados para
+  a opção `mask` do `toHaveScreenshot` — não fazem parte da UI real e não
+  devem participar do diff.
+
+Gerados com `npx playwright test tests/e2e/visual.spec.ts --update-snapshots`
+e confirmados estáveis executando a suíte normal (sem a flag) 3× seguidas
+sem nenhum diff.
+
+### 16.4 Tabela cenário → spec (readme §9)
+
+| # | Cenário (readme §9) | Spec(s) |
+| --- | --- | --- |
+| 1 | Busca, filtros combinados, ordenação, paginação, restauração via histórico | `catalog-search.spec.ts` |
+| 2 | Acesso direto ao detalhe + recurso inexistente | `nft-detail.spec.ts` |
+| 3 | Cadastro, login, expiração de sessão, logout, troca de usuário | `auth.spec.ts` (+ `realtime-session.spec.ts` para a troca Ana↔Bruno) |
+| 4 | Favoritos: sucesso, falha de mutation, recuperação | `favorites.spec.ts` |
+| 5 | Carrinho: quantidades, remoção, cupom, persistência refresh/login | `cart.spec.ts` |
+| 6 | Compra completa catálogo → recibo confirmado | `purchase-flow.spec.ts` (+ `checkout.spec.ts` para o pagamento isolado) |
+| 7 | Falha de pagamento, clique repetido, timeout com recuperação do mesmo pedido | `checkout.spec.ts` |
+| 8 | Edição de perfil/avatar/senha/carteiras com erros de validação | `account.spec.ts` |
+| 9 | Alteração de preço/disponibilidade via Socket.IO durante checkout | `realtime.spec.ts`, `checkout.spec.ts` (teste "last-second stale quote...") |
+| 10 | Eventos duplicados/antigos, desconexão, retomada de pedido pendente | `realtime.spec.ts`, `realtime-pending-order.spec.ts` |
+| 11 | Navegação por teclado, foco de diálogos, validação de formulários | `a11y-forms.spec.ts` |
+| 12 | Skeletons em carregamento lento, feedback de falha, recuperação | `loading-states.spec.ts` |
+| — | Regressão visual (início, detalhe, carrinho, pagamento) | `visual.spec.ts` |
+| — | Chromium desktop + mobile | `playwright.config.ts` (projetos `chromium-desktop`/`chromium-mobile`) |
+
+### 16.5 Infraestrutura (`playwright.config.ts`)
+
+- **Isolamento por teste**: cada teste Playwright já roda num contexto de
+  browser novo por padrão (sem `storageState` compartilhado) — `localStorage`
+  (onde o banco simulado e o cenário do painel de mocks persistem, ver §8)
+  começa vazio em todo teste, ou seja, semeado do zero a partir das fixtures
+  na primeira leitura. Não foi necessário nenhum `beforeEach` de reset
+  explícito; o único cuidado foi não compartilhar `storageState` entre
+  testes.
+- **Relógio/latência controlados**: `page.clock` (`auth.spec.ts`,
+  `checkout.spec.ts`) para os 2 cenários de tempo sensíveis a
+  `staleTime`/`refetchInterval`; `latencyOverridesMs`/`networkDown`/
+  `forceError`/`forceEmpty`/`latencyMs` do painel de mocks para todo o
+  resto — nunca um `page.waitForTimeout()` arbitrário como mecanismo de
+  sincronização.
+- **Reporter HTML + traces**: já configurados desde a Task 0.1
+  (`reporter: [['html', ...], ['list']]`, `trace: 'retain-on-failure'`,
+  `screenshot: 'only-on-failure'`) — confirmados aqui gerando
+  `playwright-report/index.html` numa execução completa.
+- **Ajustes desta fase** (robustez sob paralelismo, não relacionados à
+  lógica dos testes):
+  - `workers: process.env.CI ? 2 : 4` — um único `webServer` (`vite dev`)
+    atende todos os workers; o paralelismo default (~nº de CPUs, 12 nesta
+    máquina) saturava esse processo único e causava timeouts intermitentes
+    até em `smoke.spec.ts` (achado ao rodar a suíte inteira pela primeira
+    vez) — contenção de recurso compartilhado, não um bug nos specs.
+  - `timeout: 45_000` (era o default de 30s) e `expect: { timeout: 10_000 }`
+    (era o default de 5s) — mesma margem para round-trips reais em cadeia
+    (ex.: um fluxo de compra completo) sob essa contenção.
+  - `retries: process.env.CI ? 2 : 1` — rede de segurança adicional contra
+    qualquer flake residual de ambiente.
+  - `smoke.spec.ts` (Task 0.1, fora do escopo nominal da Fase 10) recebeu um
+    fix pontual: a asserção original checava o skeleton do catálogo
+    correndo contra o próprio fetch (latência padrão de só 150-500ms) sem
+    nenhuma garantia de ainda estar montado no primeiro poll — intermitente
+    mesmo isolado, sem nenhum worker concorrente. Corrigido travando a
+    latência mínima (`800-1200ms`) via painel de mocks antes da asserção,
+    mesmo padrão já usado no resto da suíte.
+  - `purchase-flow.spec.ts`: a navegação ao detalhe a partir da busca
+    clicava o link antes do filtro (debounced em 400ms) ter de fato reduzido
+    a grade a 1 item — corrigido esperando explicitamente
+    `toHaveCount(1)` antes do clique, eliminando uma corrida entre o
+    debounce e a interação.
+
+### 16.6 Comandos executados para o gate desta fase
+
+A partir de um checkout limpo (sem `--update-snapshots`), nesta ordem:
+
+```
+npm run test:unit    # 85/85 testes, 9 arquivos
+npm run test:e2e     # 109 testes passando + 1 skip esperado (disclosure mobile no projeto desktop)
+npm run typecheck    # tsc -b, sem erros
+npm run lint         # oxlint, sem avisos
+npm run build        # tsc -b && vite build, sem erros
+```
+
+O 1 teste "skipped" é `a11y-forms.spec.ts` › "the mobile navigation
+disclosure..." no projeto `chromium-desktop` — pulado deliberadamente
+(`test.skip` por largura de viewport ≥768px), não uma falha; o mesmo teste
+roda e passa no projeto `chromium-mobile`.

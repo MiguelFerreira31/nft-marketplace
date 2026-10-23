@@ -34,7 +34,16 @@ test('profile and avatar validation, save, and survive refresh', async ({ page }
   await loginAs(page)
   await page.goto('/account/profile')
 
+  // `ProfilePage` mostra um skeleton (`aria-label="Carregando perfil"`)
+  // enquanto `profileQuery` resolve, e o `<form>` em si tem
+  // `key={profile.updatedAt}` (remonta a cada save bem-sucedido — ver
+  // `account.profile.tsx`). Espera o valor SEMEADO real estar no campo
+  // (não só o formulário existir) antes de interagir — sob contenção de
+  // CPU/rede, interagir contra o skeleton/formulário ainda não hidratado é
+  // uma corrida (achado do gate `val-testing-strategy`, mesmo padrão já
+  // corrigido em `smoke.spec.ts`/`purchase-flow.spec.ts`).
   const profileForm = page.getByRole('form', { name: 'Editar dados do perfil' })
+  await expect(profileForm.getByLabel('Nome')).toHaveValue('Ana Martins', { timeout: 15_000 })
   await profileForm.getByLabel('Nome').fill('A')
   await profileForm.getByRole('button', { name: 'Salvar alterações' }).click()
   await expect(profileForm.getByText(/Informe um nome entre 2 e/)).toBeVisible()
@@ -97,6 +106,14 @@ test('password validation and change persist without exposing the password', asy
   await loginAs(page)
   await page.goto('/account/profile')
 
+  // Mesmo skeleton compartilhado de `ProfilePage` (ver comentário equivalente
+  // no teste acima) — espera o formulário de nome (valor semeado real) antes
+  // de interagir com o de senha, confirmando que a página já saiu do estado
+  // de carregamento.
+  await expect(page.getByRole('form', { name: 'Editar dados do perfil' }).getByLabel('Nome')).toHaveValue(
+    'Ana Martins',
+    { timeout: 15_000 },
+  )
   const passwordForm = page.getByRole('form', { name: 'Alterar senha' })
   await passwordForm.getByLabel('Senha atual').fill('senha-incorreta')
   await passwordForm.getByRole('textbox', { name: 'Nova senha', exact: true }).fill('curta')
@@ -144,7 +161,11 @@ test('create and update both wallet slots, validate API failures, and persist af
   await page.goto('/account/wallets')
   const primaryForm = page.getByRole('form', { name: 'Carteira principal: cadastro e edição' })
   const secondaryForm = page.getByRole('form', { name: 'Carteira secundária: cadastro e edição' })
-  await expect(primaryForm).toBeVisible()
+  // `WalletsPage` também mostra um skeleton (`aria-label="Carregando
+  // carteiras"`) enquanto a sessão/carteiras resolvem — espera os DOIS
+  // formulários reais (não só o primeiro) antes de qualquer interação.
+  await expect(primaryForm).toBeVisible({ timeout: 15_000 })
+  await expect(secondaryForm).toBeVisible({ timeout: 15_000 })
   const mismatchedKindResponse = await page.evaluate(async () => {
     const response = await fetch('/api/wallets/primary', {
       method: 'PUT',
@@ -237,6 +258,8 @@ test('create and update both wallet slots, validate API failures, and persist af
   })
   expect(cartStatus).toBe(201)
   await page.goto('/checkout')
+  await expect(page.getByRole('heading', { name: 'Pagamento' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByLabel('Carteira cadastrada')).toBeVisible({ timeout: 15_000 })
   await page.getByLabel('Carteira cadastrada').selectOption({ label: 'Minha secundária' })
   await expect(page.getByLabel('Rede da carteira')).toHaveValue('polygon-sim')
   await expect(page.getByText(updatedSecondaryAddress)).toBeVisible()
